@@ -3175,5 +3175,608 @@ server <- function(input, output, session) {
                 main = paste("Perbandingan", numeric_vars[2]), 
                 col = colors[4:6], xlab = "SOVI Category", ylab = numeric_vars[2])
         
-        #
-        rr
+        # Scatter plots for correlation
+        plot(sovi_data[[numeric_vars[1]]], sovi_data[[numeric_vars[2]]], 
+             main = paste("Korelasi", numeric_vars[1], "vs", numeric_vars[2]),
+             xlab = numeric_vars[1], ylab = numeric_vars[2], 
+             col = colors[4], pch = 19, alpha = 0.6)
+        abline(lm(sovi_data[[numeric_vars[2]]] ~ sovi_data[[numeric_vars[1]]]), col = colors[1], lwd = 2)
+      }
+      
+      # Histogram for one-sample test
+      if(length(numeric_vars) >= 1) {
+        hist(sovi_data[[numeric_vars[1]]], main = paste("Distribusi", numeric_vars[1]), 
+             col = colors[5], border = "white", xlab = numeric_vars[1])
+        abline(v = mean(sovi_data[[numeric_vars[1]]], na.rm = TRUE), col = colors[1], lwd = 2, lty = 2)
+        
+        # Density plot
+        plot(density(sovi_data[[numeric_vars[1]]], na.rm = TRUE), 
+             main = paste("Density Plot", numeric_vars[1]), 
+             col = colors[1], lwd = 2, xlab = numeric_vars[1])
+        polygon(density(sovi_data[[numeric_vars[1]]], na.rm = TRUE), col = adjustcolor(colors[5], alpha = 0.3))
+        
+        # Q-Q plot for normality
+        qqnorm(sovi_data[[numeric_vars[1]]], main = paste("Q-Q Plot", numeric_vars[1]), col = colors[4])
+        qqline(sovi_data[[numeric_vars[1]]], col = colors[1], lwd = 2)
+      }
+      
+      dev.off()
+    }
+  )
+  
+  output$download_inferensia_pdf <- downloadHandler(
+    filename = function() { paste0("statistik_inferensia_report_", Sys.Date(), ".pdf") },
+    content = function(file) {
+      pdf(file, width = 12, height = 9)
+      
+      # Title page
+      plot.new()
+      text(0.5, 0.8, "LAPORAN STATISTIK INFERENSIA", cex = 2, font = 2)
+      text(0.5, 0.7, "Dashboard Analisis SOVI - STIS UAS 2025", cex = 1.5)
+      text(0.5, 0.6, paste("Tanggal:", Sys.Date()), cex = 1.2)
+      
+      # Statistical test visualizations
+      par(mfrow = c(2, 2), mar = c(4, 4, 3, 2))
+      numeric_vars <- names(select_if(sovi_data, is.numeric))
+      
+      if(length(numeric_vars) >= 2 && "SOVI_Category" %in% names(sovi_data)) {
+        # Group comparisons
+        boxplot(sovi_data[[numeric_vars[1]]] ~ sovi_data$SOVI_Category, 
+                main = paste("Uji Beda Rata-rata", numeric_vars[1]), 
+                col = colors[4:6], xlab = "SOVI Category", ylab = numeric_vars[1])
+        
+        boxplot(sovi_data[[numeric_vars[2]]] ~ sovi_data$SOVI_Category, 
+                main = paste("Uji Beda Rata-rata", numeric_vars[2]), 
+                col = colors[4:6], xlab = "SOVI Category", ylab = numeric_vars[2])
+        
+        # Correlation analysis
+        plot(sovi_data[[numeric_vars[1]]], sovi_data[[numeric_vars[2]]], 
+             main = "Analisis Korelasi", xlab = numeric_vars[1], ylab = numeric_vars[2], 
+             col = colors[4], pch = 19)
+        abline(lm(sovi_data[[numeric_vars[2]]] ~ sovi_data[[numeric_vars[1]]]), col = colors[1], lwd = 2)
+        
+        # Proportion analysis
+        if("SOVI_Category" %in% names(sovi_data)) {
+          prop_table <- table(sovi_data$SOVI_Category)
+          barplot(prop_table, main = "Analisis Proporsi SOVI Category", 
+                  col = colors[4:6], ylab = "Frekuensi")
+        }
+      }
+      
+      # Additional pages for detailed test results could be added here
+      
+      dev.off()
+    }
+  )
+  
+  output$download_inferensia_word <- downloadHandler(
+    filename = function() { paste0("statistik_inferensia_report_", Sys.Date(), ".txt") },
+    content = function(file) {
+      numeric_vars <- names(select_if(sovi_data, is.numeric))
+      
+      report_content <- paste(
+        "LAPORAN STATISTIK INFERENSIA",
+        "Dashboard Analisis SOVI - STIS UAS 2025",
+        "========================================",
+        "",
+        "UJI HIPOTESIS YANG TERSEDIA",
+        "============================",
+        "1. Uji Normalitas (Shapiro-Wilk, Anderson-Darling, Kolmogorov-Smirnov, Jarque-Bera)",
+        "2. Uji Homogenitas (Levene, Bartlett, Fligner-Killeen)",
+        "3. Uji t Satu Sampel",
+        "4. Uji t Dua Sampel (Independent & Paired)",
+        "5. Uji Proporsi",
+        "6. Uji Varians (F-test)",
+        "7. ANOVA Satu Arah",
+        "8. ANOVA Dua Arah",
+        "",
+        "RINGKASAN DATASET UNTUK UJI INFERENSIA",
+        "======================================",
+        paste("Total Observasi:", nrow(sovi_data)),
+        paste("Variabel Numerik:", length(numeric_vars)),
+        paste("Variabel Kategorik:", ncol(sovi_data) - length(numeric_vars)),
+        "",
+        "STATISTIK DESKRIPTIF UTAMA",
+        "==========================",
+        if(length(numeric_vars) >= 1) {
+          paste("Variabel:", numeric_vars[1])
+          paste("  Mean:", round(mean(sovi_data[[numeric_vars[1]]], na.rm = TRUE), 4))
+          paste("  Median:", round(median(sovi_data[[numeric_vars[1]]], na.rm = TRUE), 4))
+          paste("  SD:", round(sd(sovi_data[[numeric_vars[1]]], na.rm = TRUE), 4))
+          paste("  Min:", round(min(sovi_data[[numeric_vars[1]]], na.rm = TRUE), 4))
+          paste("  Max:", round(max(sovi_data[[numeric_vars[1]]], na.rm = TRUE), 4))
+        } else {
+          "Tidak ada variabel numerik tersedia"
+        },
+        "",
+        if(length(numeric_vars) >= 2) {
+          paste("Variabel:", numeric_vars[2])
+          paste("  Mean:", round(mean(sovi_data[[numeric_vars[2]]], na.rm = TRUE), 4))
+          paste("  Median:", round(median(sovi_data[[numeric_vars[2]]], na.rm = TRUE), 4))
+          paste("  SD:", round(sd(sovi_data[[numeric_vars[2]]], na.rm = TRUE), 4))
+          paste("  Min:", round(min(sovi_data[[numeric_vars[2]]], na.rm = TRUE), 4))
+          paste("  Max:", round(max(sovi_data[[numeric_vars[2]]], na.rm = TRUE), 4))
+        } else {
+          ""
+        },
+        "",
+        "KORELASI ANTAR VARIABEL",
+        "=======================",
+        if(length(numeric_vars) >= 2) {
+          paste("Korelasi", numeric_vars[1], "dengan", numeric_vars[2], ":",
+                round(cor(sovi_data[[numeric_vars[1]]], sovi_data[[numeric_vars[2]]], use = "complete.obs"), 4))
+        } else {
+          "Tidak cukup variabel untuk analisis korelasi"
+        },
+        "",
+        "DISTRIBUSI KATEGORI (jika ada)",
+        "==============================",
+        if("SOVI_Category" %in% names(sovi_data)) {
+          paste("Distribusi SOVI_Category:")
+          paste(names(table(sovi_data$SOVI_Category)), ":", table(sovi_data$SOVI_Category), collapse = "\n")
+        } else {
+          "Belum ada kategorisasi SOVI"
+        },
+        "",
+        "REKOMENDASI UJI STATISTIK",
+        "=========================",
+        "1. Untuk membandingkan rata-rata 2 kelompok: Uji t dua sampel",
+        "2. Untuk membandingkan rata-rata >2 kelompok: ANOVA",
+        "3. Untuk menguji normalitas: Shapiro-Wilk (n≤5000) atau Anderson-Darling",
+        "4. Untuk menguji homogenitas varians: Levene Test",
+        "5. Untuk data tidak normal: Gunakan uji non-parametrik",
+        "",
+        "INTERPRETASI LEVEL SIGNIFIKANSI",
+        "===============================",
+        "α = 0.05 (5%): Standar dalam penelitian sosial",
+        "α = 0.01 (1%): Untuk penelitian yang memerlukan kepastian tinggi",
+        "p-value < α: Tolak H₀ (hasil signifikan)",
+        "p-value ≥ α: Gagal tolak H₀ (hasil tidak signifikan)",
+        "",
+        "Laporan dibuat pada:", Sys.time(),
+        "Dashboard: SOVI Analysis - STIS UAS 2025",
+        sep = "\n"
+      )
+      writeLines(report_content, file)
+    }
+  )
+  
+  output$download_inferensia_all <- downloadHandler(
+    filename = function() { paste0("statistik_inferensia_all_", Sys.Date(), ".zip") },
+    content = function(file) {
+      temp_dir <- tempdir()
+      
+      # JPG
+      jpg_file <- file.path(temp_dir, "statistik_inferensia_dashboard.jpg")
+      jpeg(jpg_file, width = 1400, height = 1000, quality = 95)
+      par(mfrow = c(2, 3), mar = c(4, 4, 3, 2))
+      numeric_vars <- names(select_if(sovi_data, is.numeric))
+      
+      if(length(numeric_vars) >= 2 && "SOVI_Category" %in% names(sovi_data)) {
+        boxplot(sovi_data[[numeric_vars[1]]] ~ sovi_data$SOVI_Category, 
+                main = paste("Boxplot", numeric_vars[1]), col = colors[4:6])
+        boxplot(sovi_data[[numeric_vars[2]]] ~ sovi_data$SOVI_Category, 
+                main = paste("Boxplot", numeric_vars[2]), col = colors[4:6])
+        plot(sovi_data[[numeric_vars[1]]], sovi_data[[numeric_vars[2]]], 
+             main = "Correlation", col = colors[4], pch = 19)
+        abline(lm(sovi_data[[numeric_vars[2]]] ~ sovi_data[[numeric_vars[1]]]), col = colors[1], lwd = 2)
+      }
+      
+      if(length(numeric_vars) >= 1) {
+        hist(sovi_data[[numeric_vars[1]]], main = paste("Histogram", numeric_vars[1]), 
+             col = colors[5], border = "white")
+        qqnorm(sovi_data[[numeric_vars[1]]], main = paste("Q-Q Plot", numeric_vars[1]), col = colors[4])
+        qqline(sovi_data[[numeric_vars[1]]], col = colors[1], lwd = 2)
+        
+        if("SOVI_Category" %in% names(sovi_data)) {
+          prop_table <- table(sovi_data$SOVI_Category)
+          barplot(prop_table, main = "SOVI Category Distribution", col = colors[4:6])
+        }
+      }
+      
+      dev.off()
+      
+      # PDF
+      pdf_file <- file.path(temp_dir, "statistik_inferensia_report.pdf")
+      pdf(pdf_file, width = 11, height = 8)
+      plot.new()
+      text(0.5, 0.8, "STATISTIK INFERENSIA REPORT", cex = 2, font = 2)
+      text(0.5, 0.6, paste("Generated:", Sys.Date()), cex = 1.2)
+      par(mfrow = c(2, 2))
+      
+      if(length(numeric_vars) >= 2 && "SOVI_Category" %in% names(sovi_data)) {
+        boxplot(sovi_data[[numeric_vars[1]]] ~ sovi_data$SOVI_Category, 
+                main = paste("Group Comparison", numeric_vars[1]), col = colors[4:6])
+        boxplot(sovi_data[[numeric_vars[2]]] ~ sovi_data$SOVI_Category, 
+                main = paste("Group Comparison", numeric_vars[2]), col = colors[4:6])
+        plot(sovi_data[[numeric_vars[1]]], sovi_data[[numeric_vars[2]]], 
+             main = "Correlation Analysis", col = colors[4], pch = 19)
+        abline(lm(sovi_data[[numeric_vars[2]]] ~ sovi_data[[numeric_vars[1]]]), col = colors[1], lwd = 2)
+        hist(sovi_data[[numeric_vars[1]]], main = paste("Distribution", numeric_vars[1]), col = colors[5])
+      }
+      
+      dev.off()
+      
+      # Word (as text)
+      word_file <- file.path(temp_dir, "statistik_inferensia_report.txt")
+      report_content <- paste(
+        "STATISTIK INFERENSIA REPORT",
+        "===========================",
+        "",
+        "SUMMARY OF STATISTICAL TESTS:",
+        "1. Normality Tests: Shapiro-Wilk, Anderson-Darling",
+        "2. Homogeneity Tests: Levene, Bartlett, Fligner-Killeen",
+        "3. t-Tests: One-sample, Two-sample (independent/paired)",
+        "4. Proportion Tests",
+        "5. Variance Tests (F-test)",
+        "6. ANOVA: One-way and Two-way",
+        "",
+        "DATASET OVERVIEW:",
+        paste("Total Observations:", nrow(sovi_data)),
+        paste("Numeric Variables:", sum(sapply(sovi_data, is.numeric))),
+        "",
+        "KEY STATISTICS:",
+        if(length(numeric_vars) >= 1) {
+          paste(numeric_vars[1], "Mean:", round(mean(sovi_data[[numeric_vars[1]]], na.rm = TRUE), 3))
+        } else {
+          "No numeric variables available"
+        },
+        "",
+        "Report created on:", Sys.time(),
+        sep = "\n"
+      )
+      writeLines(report_content, word_file)
+      
+      # Create zip
+      zip::zip(file, files = c(jpg_file, pdf_file, word_file), mode = "cherry-pick")
+    }
+  )
+  
+  # Analisis Regresi Downloads
+  output$download_regresi_jpg <- downloadHandler(
+    filename = function() { paste0("analisis_regresi_", Sys.Date(), ".jpg") },
+    content = function(file) {
+      jpeg(file, width = 1400, height = 1000, quality = 95)
+      par(mfrow = c(2, 3), mar = c(4, 4, 3, 2))
+      
+      # Regression diagnostic plots if model exists
+      if(!is.null(values$regression_model)) {
+        # Fitted vs Actual
+        fitted_vals <- fitted(values$regression_model)
+        actual_vals <- fitted_vals + residuals(values$regression_model)
+        plot(fitted_vals, actual_vals, main = "Fitted vs Actual", 
+             xlab = "Fitted Values", ylab = "Actual Values", 
+             col = colors[4], pch = 19)
+        abline(0, 1, col = colors[1], lwd = 2)
+        
+        # Residuals vs Fitted
+        plot(fitted_vals, residuals(values$regression_model), 
+             main = "Residuals vs Fitted", xlab = "Fitted Values", ylab = "Residuals",
+             col = colors[4], pch = 19)
+        abline(h = 0, col = colors[1], lwd = 2, lty = 2)
+        
+        # Q-Q plot of residuals
+        qqnorm(residuals(values$regression_model), main = "Normal Q-Q Plot", col = colors[4])
+        qqline(residuals(values$regression_model), col = colors[1], lwd = 2)
+        
+        # Scale-Location plot
+        sqrt_abs_resid <- sqrt(abs(residuals(values$regression_model)))
+        plot(fitted_vals, sqrt_abs_resid, main = "Scale-Location", 
+             xlab = "Fitted Values", ylab = "√|Residuals|", col = colors[4], pch = 19)
+        
+        # Leverage plot
+        leverage <- hatvalues(values$regression_model)
+        plot(leverage, residuals(values$regression_model), main = "Residuals vs Leverage",
+             xlab = "Leverage", ylab = "Residuals", col = colors[4], pch = 19)
+        abline(h = 0, col = colors[1], lwd = 2, lty = 2)
+        
+        # Cook's distance
+        cooksd <- cooks.distance(values$regression_model)
+        plot(cooksd, main = "Cook's Distance", ylab = "Cook's Distance", 
+             col = colors[4], pch = 19)
+        abline(h = 4/(length(cooksd)), col = colors[1], lwd = 2, lty = 2)
+      } else {
+        # Default plots if no model
+        numeric_vars <- names(select_if(sovi_data, is.numeric))
+        if(length(numeric_vars) >= 2) {
+          for(i in 1:min(6, length(numeric_vars))) {
+            if(i < length(numeric_vars)) {
+              plot(sovi_data[[numeric_vars[i]]], sovi_data[[numeric_vars[i+1]]], 
+                   main = paste("Scatter:", numeric_vars[i], "vs", numeric_vars[i+1]),
+                   xlab = numeric_vars[i], ylab = numeric_vars[i+1], 
+                   col = colors[4], pch = 19)
+              abline(lm(sovi_data[[numeric_vars[i+1]]] ~ sovi_data[[numeric_vars[i]]]), 
+                     col = colors[1], lwd = 2)
+            } else {
+              hist(sovi_data[[numeric_vars[i]]], main = paste("Distribution", numeric_vars[i]),
+                   col = colors[4], border = "white")
+            }
+          }
+        }
+      }
+      
+      dev.off()
+    }
+  )
+  
+  output$download_regresi_pdf <- downloadHandler(
+    filename = function() { paste0("analisis_regresi_report_", Sys.Date(), ".pdf") },
+    content = function(file) {
+      pdf(file, width = 12, height = 9)
+      
+      # Title page
+      plot.new()
+      text(0.5, 0.8, "LAPORAN ANALISIS REGRESI", cex = 2, font = 2)
+      text(0.5, 0.7, "Dashboard Analisis SOVI - STIS UAS 2025", cex = 1.5)
+      text(0.5, 0.6, paste("Tanggal:", Sys.Date()), cex = 1.2)
+      
+      if(!is.null(values$regression_model)) {
+        # Model summary page
+        plot.new()
+        text(0.5, 0.9, "RINGKASAN MODEL REGRESI", cex = 1.8, font = 2)
+        
+        model_summary <- summary(values$regression_model)
+        text(0.1, 0.8, paste("R-squared:", round(model_summary$r.squared, 4)), cex = 1.2, adj = 0)
+        text(0.1, 0.75, paste("Adjusted R-squared:", round(model_summary$adj.r.squared, 4)), cex = 1.2, adj = 0)
+        text(0.1, 0.7, paste("F-statistic:", round(model_summary$fstatistic[1], 3)), cex = 1.2, adj = 0)
+        text(0.1, 0.65, paste("Residual Standard Error:", round(model_summary$sigma, 4)), cex = 1.2, adj = 0)
+        text(0.1, 0.6, paste("Degrees of Freedom:", model_summary$df[2]), cex = 1.2, adj = 0)
+        
+        # Diagnostic plots
+        par(mfrow = c(2, 2), mar = c(4, 4, 3, 2))
+        
+        # Fitted vs Actual
+        fitted_vals <- fitted(values$regression_model)
+        actual_vals <- fitted_vals + residuals(values$regression_model)
+        plot(fitted_vals, actual_vals, main = "Fitted vs Actual Values", 
+             xlab = "Fitted Values", ylab = "Actual Values", 
+             col = colors[4], pch = 19)
+        abline(0, 1, col = colors[1], lwd = 2)
+        
+        # Residuals vs Fitted
+        plot(fitted_vals, residuals(values$regression_model), 
+             main = "Residuals vs Fitted Values", xlab = "Fitted Values", ylab = "Residuals",
+             col = colors[4], pch = 19)
+        abline(h = 0, col = colors[1], lwd = 2, lty = 2)
+        
+        # Q-Q plot
+        qqnorm(residuals(values$regression_model), main = "Normal Q-Q Plot of Residuals", col = colors[4])
+        qqline(residuals(values$regression_model), col = colors[1], lwd = 2)
+        
+        # Scale-Location
+        sqrt_abs_resid <- sqrt(abs(residuals(values$regression_model)))
+        plot(fitted_vals, sqrt_abs_resid, main = "Scale-Location Plot", 
+             xlab = "Fitted Values", ylab = "√|Residuals|", col = colors[4], pch = 19)
+        
+      } else {
+        # No model available page
+        plot.new()
+        text(0.5, 0.5, "BELUM ADA MODEL REGRESI", cex = 2, font = 2)
+        text(0.5, 0.4, "Silakan buat model regresi terlebih dahulu", cex = 1.5)
+      }
+      
+      dev.off()
+    }
+  )
+  
+  output$download_regresi_word <- downloadHandler(
+    filename = function() { paste0("analisis_regresi_report_", Sys.Date(), ".txt") },
+    content = function(file) {
+      report_content <- paste(
+        "LAPORAN ANALISIS REGRESI",
+        "Dashboard Analisis SOVI - STIS UAS 2025",
+        "========================================",
+        "",
+        if(!is.null(values$regression_model)) {
+          model_summary <- summary(values$regression_model)
+          paste(
+            "MODEL REGRESI LINEAR BERGANDA",
+            "=============================",
+            "",
+            "RINGKASAN MODEL:",
+            paste("R-squared:", round(model_summary$r.squared, 4)),
+            paste("Adjusted R-squared:", round(model_summary$adj.r.squared, 4)),
+            paste("F-statistic:", round(model_summary$fstatistic[1], 3)),
+            paste("p-value:", format.pval(pf(model_summary$fstatistic[1], 
+                                           model_summary$fstatistic[2], 
+                                           model_summary$fstatistic[3], 
+                                           lower.tail = FALSE))),
+            paste("Residual Standard Error:", round(model_summary$sigma, 4)),
+            paste("Degrees of Freedom:", model_summary$df[2]),
+            "",
+            "KOEFISIEN REGRESI:",
+            "==================",
+            paste("Intercept:", round(model_summary$coefficients[1,1], 4)),
+            if(nrow(model_summary$coefficients) > 1) {
+              paste("Predictors:", 
+                    paste(rownames(model_summary$coefficients)[-1], 
+                          round(model_summary$coefficients[-1,1], 4), 
+                          collapse = ", "))
+            } else {
+              "No predictors in model"
+            },
+            "",
+            "SIGNIFIKANSI KOEFISIEN:",
+            "======================",
+            paste("Variabel signifikan (p < 0.05):", 
+                  sum(model_summary$coefficients[, "Pr(>|t|)"] < 0.05)),
+            paste("Total variabel dalam model:", nrow(model_summary$coefficients)),
+            "",
+            "EVALUASI MODEL:",
+            "===============",
+            if(model_summary$r.squared > 0.7) {
+              "Model memiliki daya prediksi yang sangat baik (R² > 0.7)"
+            } else if(model_summary$r.squared > 0.5) {
+              "Model memiliki daya prediksi yang cukup baik (R² > 0.5)"
+            } else {
+              "Model memiliki daya prediksi yang perlu diperbaiki (R² ≤ 0.5)"
+            },
+            "",
+            "UJI ASUMSI:",
+            "===========",
+            "1. Linearitas: Diperiksa melalui plot residual vs fitted",
+            "2. Normalitas: Diperiksa melalui Q-Q plot residual",
+            "3. Homoskedastisitas: Diperiksa melalui scale-location plot",
+            "4. Independensi: Diperiksa melalui Durbin-Watson test",
+            if(length(all.vars(formula(values$regression_model))) > 2) {
+              "5. Multikolinearitas: Diperiksa melalui VIF"
+            } else {
+              ""
+            },
+            sep = "\n"
+          )
+        } else {
+          paste(
+            "BELUM ADA MODEL REGRESI",
+            "=======================",
+            "",
+            "Model regresi belum dibuat. Untuk membuat model:",
+            "1. Pilih variabel respons",
+            "2. Pilih satu atau lebih variabel prediktor", 
+            "3. Klik tombol 'Run Regression'",
+            "",
+            "KOMPONEN ANALISIS REGRESI:",
+            "==========================",
+            "1. Multiple Linear Regression",
+            "2. Model Diagnostics",
+            "3. Assumption Testing",
+            "4. Residual Analysis",
+            "5. Influence Measures",
+            "",
+            "UJI ASUMSI YANG TERSEDIA:",
+            "=========================",
+            "1. Normalitas Residual (Shapiro-Wilk, Jarque-Bera)",
+            "2. Homoskedastisitas (Breusch-Pagan, NCV Test)",
+            "3. Autokorelasi (Durbin-Watson)",
+            "4. Multikolinearitas (VIF)",
+            sep = "\n"
+          )
+        },
+        "",
+        "INTERPRETASI KOEFISIEN:",
+        "======================",
+        "- Intercept: Nilai prediksi ketika semua prediktor = 0",
+        "- Slope: Perubahan rata-rata respons per unit perubahan prediktor",
+        "- p-value < 0.05: Koefisien signifikan secara statistik",
+        "- R²: Proporsi varians respons yang dijelaskan model",
+        "",
+        "DIAGNOSTIK MODEL:",
+        "=================",
+        "- Fitted vs Actual: Akurasi prediksi model",
+        "- Residuals vs Fitted: Pola dalam residual",
+        "- Q-Q Plot: Normalitas residual",
+        "- Scale-Location: Homoskedastisitas",
+        "- Leverage: Pengaruh observasi individual",
+        "",
+        "Laporan dibuat pada:", Sys.time(),
+        "Dashboard: SOVI Analysis - STIS UAS 2025",
+        sep = "\n"
+      )
+      writeLines(report_content, file)
+    }
+  )
+  
+  output$download_regresi_all <- downloadHandler(
+    filename = function() { paste0("analisis_regresi_all_", Sys.Date(), ".zip") },
+    content = function(file) {
+      temp_dir <- tempdir()
+      
+      # JPG
+      jpg_file <- file.path(temp_dir, "analisis_regresi_dashboard.jpg")
+      jpeg(jpg_file, width = 1400, height = 1000, quality = 95)
+      par(mfrow = c(2, 3), mar = c(4, 4, 3, 2))
+      
+      if(!is.null(values$regression_model)) {
+        fitted_vals <- fitted(values$regression_model)
+        actual_vals <- fitted_vals + residuals(values$regression_model)
+        
+        plot(fitted_vals, actual_vals, main = "Fitted vs Actual", 
+             xlab = "Fitted", ylab = "Actual", col = colors[4], pch = 19)
+        abline(0, 1, col = colors[1], lwd = 2)
+        
+        plot(fitted_vals, residuals(values$regression_model), 
+             main = "Residuals vs Fitted", xlab = "Fitted", ylab = "Residuals", col = colors[4], pch = 19)
+        abline(h = 0, col = colors[1], lwd = 2, lty = 2)
+        
+        qqnorm(residuals(values$regression_model), main = "Q-Q Plot", col = colors[4])
+        qqline(residuals(values$regression_model), col = colors[1], lwd = 2)
+        
+        sqrt_abs_resid <- sqrt(abs(residuals(values$regression_model)))
+        plot(fitted_vals, sqrt_abs_resid, main = "Scale-Location", 
+             xlab = "Fitted", ylab = "√|Residuals|", col = colors[4], pch = 19)
+        
+        leverage <- hatvalues(values$regression_model)
+        plot(leverage, residuals(values$regression_model), main = "Leverage", 
+             xlab = "Leverage", ylab = "Residuals", col = colors[4], pch = 19)
+        
+        cooksd <- cooks.distance(values$regression_model)
+        plot(cooksd, main = "Cook's Distance", ylab = "Cook's D", col = colors[4], pch = 19)
+      } else {
+        numeric_vars <- names(select_if(sovi_data, is.numeric))
+        if(length(numeric_vars) >= 2) {
+          for(i in 1:min(6, length(numeric_vars)-1)) {
+            plot(sovi_data[[numeric_vars[i]]], sovi_data[[numeric_vars[i+1]]], 
+                 main = paste(numeric_vars[i], "vs", numeric_vars[i+1]), 
+                 xlab = numeric_vars[i], ylab = numeric_vars[i+1], col = colors[4], pch = 19)
+            abline(lm(sovi_data[[numeric_vars[i+1]]] ~ sovi_data[[numeric_vars[i]]]), col = colors[1], lwd = 2)
+          }
+        }
+      }
+      dev.off()
+      
+      # PDF
+      pdf_file <- file.path(temp_dir, "analisis_regresi_report.pdf")
+      pdf(pdf_file, width = 11, height = 8)
+      plot.new()
+      text(0.5, 0.8, "ANALISIS REGRESI REPORT", cex = 2, font = 2)
+      text(0.5, 0.6, paste("Generated:", Sys.Date()), cex = 1.2)
+      
+      if(!is.null(values$regression_model)) {
+        par(mfrow = c(2, 2))
+        fitted_vals <- fitted(values$regression_model)
+        actual_vals <- fitted_vals + residuals(values$regression_model)
+        
+        plot(fitted_vals, actual_vals, main = "Model Fit", col = colors[4], pch = 19)
+        abline(0, 1, col = colors[1], lwd = 2)
+        
+        plot(fitted_vals, residuals(values$regression_model), main = "Residuals", col = colors[4], pch = 19)
+        abline(h = 0, col = colors[1], lwd = 2)
+        
+        qqnorm(residuals(values$regression_model), main = "Normality", col = colors[4])
+        qqline(residuals(values$regression_model), col = colors[1], lwd = 2)
+        
+        hist(residuals(values$regression_model), main = "Residual Distribution", col = colors[5])
+      }
+      dev.off()
+      
+      # Word (as text)
+      word_file <- file.path(temp_dir, "analisis_regresi_report.txt")
+      report_content <- paste(
+        "ANALISIS REGRESI REPORT",
+        "=======================",
+        "",
+        if(!is.null(values$regression_model)) {
+          model_summary <- summary(values$regression_model)
+          paste(
+            "MODEL SUMMARY:",
+            paste("R-squared:", round(model_summary$r.squared, 4)),
+            paste("Adjusted R-squared:", round(model_summary$adj.r.squared, 4)),
+            paste("F-statistic:", round(model_summary$fstatistic[1], 3)),
+            paste("Residual SE:", round(model_summary$sigma, 4)),
+            sep = "\n"
+          )
+        } else {
+          "No regression model available"
+        },
+        "",
+        "Report created on:", Sys.time(),
+        sep = "\n"
+      )
+      writeLines(report_content, word_file)
+      
+      # Create zip
+      zip::zip(file, files = c(jpg_file, pdf_file, word_file), mode = "cherry-pick")
+    }
+  )
+  
+}  # End of server function
