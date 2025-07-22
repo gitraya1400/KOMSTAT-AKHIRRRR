@@ -8,56 +8,14 @@ server <- function(input, output, session) {
   # DATA PREPARATION AND LOADING
   # =====================================================
   
-  # Create sample SOVI data if not available
+  # Load actual SOVI data - no dummy data creation
   if(!exists("sovi_data") || is.null(sovi_data)) {
-    set.seed(123)
-    n <- 500
-    
-    sovi_data <<- data.frame(
-      DISTRICTCODE = 1101:(1100 + n),
-      POVERTY = round(runif(n, 5, 45), 2),
-      LOWEDU = round(runif(n, 10, 60), 2),
-      CHILDREN = round(runif(n, 15, 35), 2),
-      ELDERLY = round(runif(n, 5, 25), 2),
-      DISABILITY = round(runif(n, 2, 15), 2),
-      MINORITY = round(runif(n, 1, 20), 2),
-      HOUSING = round(runif(n, 10, 40), 2),
-      TRANSPORT = round(runif(n, 5, 30), 2),
-      EMPLOYMENT = round(runif(n, 8, 35), 2),
-      INCOME = round(runif(n, 20000, 80000), 0),
-      stringsAsFactors = FALSE
-    )
-    
-    # Add categorical variables
-    sovi_data$SOVI_Category <<- cut(
-      sovi_data$POVERTY + sovi_data$LOWEDU + sovi_data$CHILDREN, 
-      breaks = 3, 
-      labels = c("Low", "Medium", "High")
-    )
-    
-    sovi_data$Population_Size <<- cut(
-      runif(n, 1000, 100000), 
-      breaks = 3, 
-      labels = c("Small", "Medium", "Large")
-    )
-    
-    sovi_data$Economic_Status <<- sample(
-      c("Developing", "Developed", "Underdeveloped"), 
-      n, 
-      replace = TRUE
-    )
-    
-    sovi_data$Age_Group <<- cut(
-      sovi_data$CHILDREN + sovi_data$ELDERLY, 
-      breaks = 3, 
-      labels = c("Young", "Mixed", "Aging")
-    )
-    
-    sovi_data$Education_Level <<- cut(
-      100 - sovi_data$LOWEDU, 
-      breaks = 3, 
-      labels = c("Low", "Medium", "High")
-    )
+    # Load data from UI if not available
+    if(exists("sovi_data", envir = .GlobalEnv)) {
+      sovi_data <<- get("sovi_data", envir = .GlobalEnv)
+    } else {
+      stop("SOVI data tidak tersedia. Pastikan data telah dimuat dengan benar.")
+    }
   }
   
   # Load shapefile data if available
@@ -81,40 +39,42 @@ server <- function(input, output, session) {
         # Merge with SOVI data
         sovi_peta <<- left_join(peta_kabupaten, sovi_data, by = "DISTRICTCODE")
         
-        # Extract coordinates for distance_data
-        coords <- st_coordinates(st_centroid(sovi_peta))
-        distance_data <<- data.frame(
-          DISTRICTCODE = sovi_peta$DISTRICTCODE,
-          LONGITUDE = coords[,1],
-          LATITUDE = coords[,2],
-          stringsAsFactors = FALSE
-        )
+        # Extract coordinates for distance_data if not already available
+        if(!exists("distance_data") || is.null(distance_data)) {
+          coords <- st_coordinates(st_centroid(sovi_peta))
+          distance_data <<- data.frame(
+            DISTRICTCODE = sovi_peta$DISTRICTCODE,
+            LONGITUDE = coords[,1],
+            LATITUDE = coords[,2],
+            stringsAsFactors = FALSE
+          )
+        }
       } else {
         sovi_peta <<- NULL
-        # Create coordinate data
-        set.seed(123)
-        distance_data <<- data.frame(
-          DISTRICTCODE = sovi_data$DISTRICTCODE,
-          LONGITUDE = runif(nrow(sovi_data), 95, 141),
-          LATITUDE = runif(nrow(sovi_data), -11, 6),
-          stringsAsFactors = FALSE
-        )
+        # Use existing distance_data if available
+        if(!exists("distance_data") || is.null(distance_data)) {
+          if(exists("distance_data", envir = .GlobalEnv)) {
+            distance_data <<- get("distance_data", envir = .GlobalEnv)
+          } else {
+            stop("Data koordinat tidak tersedia. Pastikan distance_data telah dimuat.")
+          }
+        }
       }
     }, error = function(e) {
       sovi_peta <<- NULL
-      # Create fallback coordinate data
-      set.seed(123)
-      distance_data <<- data.frame(
-        DISTRICTCODE = sovi_data$DISTRICTCODE,
-        LONGITUDE = runif(nrow(sovi_data), 95, 141),
-        LATITUDE = runif(nrow(sovi_data), -11, 6),
-        stringsAsFactors = FALSE
-      )
+      # Use existing distance_data or throw error
+      if(!exists("distance_data") || is.null(distance_data)) {
+        if(exists("distance_data", envir = .GlobalEnv)) {
+          distance_data <<- get("distance_data", envir = .GlobalEnv)
+        } else {
+          stop("Data koordinat tidak tersedia dan shapefile gagal dimuat.")
+        }
+      }
     })
   }
   
-  # Color palette
-  colors <- c("#2E86C1", "#E74C3C", "#F39C12", "#27AE60", "#8E44AD", "#F1C40F", "#E67E22", "#1ABC9C")
+  # Professional dashboard color palette
+  colors <- c("#2C3E50", "#34495E", "#3498DB", "#5DADE2", "#85C1E9", "#AED6F1", "#ECF0F1", "#BDC3C7")
   
   # Reactive values
   values <- reactiveValues(
@@ -174,19 +134,43 @@ server <- function(input, output, session) {
   })
   
   output$avg_poverty_rate <- renderText({
-    round(mean(sovi_data$POVERTY, na.rm = TRUE), 2)
+    paste0(round(mean(sovi_data$POVERTY, na.rm = TRUE), 2), "%")
   })
   
   output$avg_education_rate <- renderText({
-    round(mean(sovi_data$LOWEDU, na.rm = TRUE), 2)
+    paste0(round(mean(sovi_data$LOWEDU, na.rm = TRUE), 2), "%")
   })
   
   output$avg_children_rate <- renderText({
-    round(mean(sovi_data$CHILDREN, na.rm = TRUE), 2)
+    paste0(round(mean(sovi_data$CHILDREN, na.rm = TRUE), 2), "%")
   })
   
   output$avg_elderly_rate <- renderText({
-    round(mean(sovi_data$ELDERLY, na.rm = TRUE), 2)
+    paste0(round(mean(sovi_data$ELDERLY, na.rm = TRUE), 2), "%")
+  })
+  
+  output$avg_disability_rate <- renderText({
+    paste0(round(mean(sovi_data$DISABILITY, na.rm = TRUE), 2), "%")
+  })
+  
+  output$avg_housing_rate <- renderText({
+    paste0(round(mean(sovi_data$HOUSING, na.rm = TRUE), 2), "%")
+  })
+  
+  output$avg_transport_rate <- renderText({
+    paste0(round(mean(sovi_data$TRANSPORT, na.rm = TRUE), 2), "%")
+  })
+  
+  output$max_poverty_rate <- renderText({
+    paste0(round(max(sovi_data$POVERTY, na.rm = TRUE), 2), "%")
+  })
+  
+  output$min_poverty_rate <- renderText({
+    paste0(round(min(sovi_data$POVERTY, na.rm = TRUE), 2), "%")
+  })
+  
+  output$poverty_std <- renderText({
+    paste0(round(sd(sovi_data$POVERTY, na.rm = TRUE), 2), "%")
   })
   
   output$correlation_strength <- renderText({
@@ -251,15 +235,17 @@ server <- function(input, output, session) {
   # Multiple distribution plots for beranda
   output$poverty_distribution <- renderPlotly({
     p <- ggplot(sovi_data, aes(x = POVERTY)) +
-      geom_histogram(bins = 30, fill = colors[4], alpha = 0.7, color = "white") +
+      geom_histogram(bins = 30, fill = colors[3], alpha = 0.8, color = "white") +
       geom_density(aes(y = after_stat(density) * length(POVERTY) * diff(range(POVERTY, na.rm = TRUE))/30),
-                   color = colors[1], linewidth = 1.2) +
+                   color = colors[1], linewidth = 1.5) +
       labs(title = "Distribusi Tingkat Kemiskinan",
            x = "Tingkat Kemiskinan (%)", y = "Frekuensi") +
       theme_minimal() +
       theme(
         plot.title = element_text(size = 14, face = "bold", color = colors[1]),
-        axis.title = element_text(size = 11, color = colors[1])
+        axis.title = element_text(size = 11, color = colors[2]),
+        panel.grid.major = element_line(color = colors[7], size = 0.3),
+        panel.grid.minor = element_blank()
       )
     
     ggplotly(p) %>%
@@ -269,15 +255,17 @@ server <- function(input, output, session) {
   
   output$education_distribution <- renderPlotly({
     p <- ggplot(sovi_data, aes(x = LOWEDU)) +
-      geom_histogram(bins = 30, fill = colors[5], alpha = 0.7, color = "white") +
+      geom_histogram(bins = 30, fill = colors[4], alpha = 0.8, color = "white") +
       geom_density(aes(y = after_stat(density) * length(LOWEDU) * diff(range(LOWEDU, na.rm = TRUE))/30),
-                   color = colors[2], linewidth = 1.2) +
+                   color = colors[1], linewidth = 1.5) +
       labs(title = "Distribusi Pendidikan Rendah",
            x = "Pendidikan Rendah (%)", y = "Frekuensi") +
       theme_minimal() +
       theme(
         plot.title = element_text(size = 14, face = "bold", color = colors[1]),
-        axis.title = element_text(size = 11, color = colors[1])
+        axis.title = element_text(size = 11, color = colors[2]),
+        panel.grid.major = element_line(color = colors[7], size = 0.3),
+        panel.grid.minor = element_blank()
       )
     
     ggplotly(p) %>%
@@ -287,15 +275,17 @@ server <- function(input, output, session) {
   
   output$children_distribution <- renderPlotly({
     p <- ggplot(sovi_data, aes(x = CHILDREN)) +
-      geom_histogram(bins = 30, fill = colors[6], alpha = 0.7, color = "white") +
+      geom_histogram(bins = 30, fill = colors[5], alpha = 0.8, color = "white") +
       geom_density(aes(y = after_stat(density) * length(CHILDREN) * diff(range(CHILDREN, na.rm = TRUE))/30),
-                   color = colors[3], linewidth = 1.2) +
-      labs(title = "Distribusi Anak-anak",
-           x = "Anak-anak (%)", y = "Frekuensi") +
+                   color = colors[1], linewidth = 1.5) +
+      labs(title = "Distribusi Populasi Anak-anak",
+           x = "Populasi Anak-anak (%)", y = "Frekuensi") +
       theme_minimal() +
       theme(
         plot.title = element_text(size = 14, face = "bold", color = colors[1]),
-        axis.title = element_text(size = 11, color = colors[1])
+        axis.title = element_text(size = 11, color = colors[2]),
+        panel.grid.major = element_line(color = colors[7], size = 0.3),
+        panel.grid.minor = element_blank()
       )
     
     ggplotly(p) %>%
@@ -303,10 +293,70 @@ server <- function(input, output, session) {
       config(displayModeBar = FALSE)
   })
   
-  # Beranda map using shapefile or distance data coordinates  
+  output$elderly_distribution <- renderPlotly({
+    p <- ggplot(sovi_data, aes(x = ELDERLY)) +
+      geom_histogram(bins = 30, fill = colors[6], alpha = 0.8, color = "white") +
+      geom_density(aes(y = after_stat(density) * length(ELDERLY) * diff(range(ELDERLY, na.rm = TRUE))/30),
+                   color = colors[1], linewidth = 1.5) +
+      labs(title = "Distribusi Populasi Lansia",
+           x = "Populasi Lansia (%)", y = "Frekuensi") +
+      theme_minimal() +
+      theme(
+        plot.title = element_text(size = 14, face = "bold", color = colors[1]),
+        axis.title = element_text(size = 11, color = colors[2]),
+        panel.grid.major = element_line(color = colors[7], size = 0.3),
+        panel.grid.minor = element_blank()
+      )
+    
+    ggplotly(p) %>%
+      layout(showlegend = FALSE) %>%
+      config(displayModeBar = FALSE)
+  })
+  
+  output$disability_distribution <- renderPlotly({
+    p <- ggplot(sovi_data, aes(x = DISABILITY)) +
+      geom_histogram(bins = 30, fill = colors[8], alpha = 0.8, color = "white") +
+      geom_density(aes(y = after_stat(density) * length(DISABILITY) * diff(range(DISABILITY, na.rm = TRUE))/30),
+                   color = colors[1], linewidth = 1.5) +
+      labs(title = "Distribusi Populasi Disabilitas",
+           x = "Populasi Disabilitas (%)", y = "Frekuensi") +
+      theme_minimal() +
+      theme(
+        plot.title = element_text(size = 14, face = "bold", color = colors[1]),
+        axis.title = element_text(size = 11, color = colors[2]),
+        panel.grid.major = element_line(color = colors[7], size = 0.3),
+        panel.grid.minor = element_blank()
+      )
+    
+    ggplotly(p) %>%
+      layout(showlegend = FALSE) %>%
+      config(displayModeBar = FALSE)
+  })
+  
+  output$housing_distribution <- renderPlotly({
+    p <- ggplot(sovi_data, aes(x = HOUSING)) +
+      geom_histogram(bins = 30, fill = colors[4], alpha = 0.8, color = "white") +
+      geom_density(aes(y = after_stat(density) * length(HOUSING) * diff(range(HOUSING, na.rm = TRUE))/30),
+                   color = colors[1], linewidth = 1.5) +
+      labs(title = "Distribusi Masalah Perumahan",
+           x = "Masalah Perumahan (%)", y = "Frekuensi") +
+      theme_minimal() +
+      theme(
+        plot.title = element_text(size = 14, face = "bold", color = colors[1]),
+        axis.title = element_text(size = 11, color = colors[2]),
+        panel.grid.major = element_line(color = colors[7], size = 0.3),
+        panel.grid.minor = element_blank()
+      )
+    
+    ggplotly(p) %>%
+      layout(showlegend = FALSE) %>%
+      config(displayModeBar = FALSE)
+  })
+  
+  # Beranda map using actual coordinate data  
   output$beranda_map <- renderLeaflet({
-    # Use shapefile data if available, otherwise use distance data
-    if(!is.null(sovi_peta) && "LONGITUDE" %in% names(sovi_peta)) {
+    # Use proper coordinate data from distance_data or shapefile
+    if(!is.null(sovi_peta)) {
       map_data <- sovi_peta
       # Extract coordinates if they're not already columns
       if(!"LONGITUDE" %in% names(map_data) || !"LATITUDE" %in% names(map_data)) {
@@ -314,65 +364,131 @@ server <- function(input, output, session) {
         map_data$LONGITUDE <- coords[,1]
         map_data$LATITUDE <- coords[,2]
       }
-    } else {
-      # Use distance_data for coordinates
-      if("DISTRICTCODE" %in% names(sovi_data) && "DISTRICTCODE" %in% names(distance_data)) {
-        map_data <- merge(sovi_data, distance_data, by = "DISTRICTCODE", all.x = TRUE)
+    } else if(!is.null(distance_data) && nrow(distance_data) > 0) {
+      # Use distance_data for coordinates - ensure proper column names
+      if("DISTRICTCODE" %in% names(sovi_data)) {
+        if("DISTRICTCODE" %in% names(distance_data)) {
+          map_data <- merge(sovi_data, distance_data, by = "DISTRICTCODE", all.x = TRUE)
+        } else {
+          # Assume first column is district code
+          distance_data_copy <- distance_data
+          names(distance_data_copy)[1] <- "DISTRICTCODE"
+          map_data <- merge(sovi_data, distance_data_copy, by = "DISTRICTCODE", all.x = TRUE)
+        }
       } else {
-        map_data <- sovi_data
-        map_data$LONGITUDE <- runif(nrow(map_data), 95, 141)
-        map_data$LATITUDE <- runif(nrow(map_data), -11, 6)
+        stop("DISTRICTCODE tidak ditemukan dalam data SOVI")
       }
+    } else {
+      stop("Data koordinat tidak tersedia. Pastikan distance_data atau shapefile telah dimuat.")
     }
     
     # Filter out rows with missing coordinates
     map_data <- map_data[!is.na(map_data$LONGITUDE) & !is.na(map_data$LATITUDE), ]
     
     if(nrow(map_data) == 0) {
-      # Fallback: create dummy coordinates if merge fails
-      map_data <- sovi_data
-      map_data$LONGITUDE <- runif(nrow(map_data), 95, 141)
-      map_data$LATITUDE <- runif(nrow(map_data), -11, 6)
+      stop("Tidak ada data koordinat yang valid untuk ditampilkan di peta.")
     }
     
-    # Create color palette
-    pal <- colorNumeric(
-      palette = c(colors[3], colors[4], colors[1]),
+    # Professional color palette for poverty mapping
+    pal_poverty <- colorNumeric(
+      palette = c("#AED6F1", "#5DADE2", "#3498DB", "#2C3E50"),
       domain = map_data$POVERTY
     )
     
-    leaflet(map_data) %>%
-      addProviderTiles(providers$CartoDB.Positron) %>%
-      setView(lng = 118, lat = -2, zoom = 5) %>%
-      addCircleMarkers(
-        lng = ~LONGITUDE,
-        lat = ~LATITUDE,
-        radius = 6,
-        fillColor = ~pal(POVERTY),
-        color = "white",
-        weight = 1,
-        opacity = 1,
-        fillOpacity = 0.8,
-        label = ~lapply(paste(
-          "<strong>District Code:", DISTRICTCODE, "</strong><br/>",
-          "Tingkat Kemiskinan:", round(POVERTY, 2), "%<br/>",
-          "Pendidikan Rendah:", round(LOWEDU, 2), "%<br/>",
-          "Anak-anak:", round(CHILDREN, 2), "%<br/>",
-          "Lansia:", round(ELDERLY, 2), "%"
-        ), HTML),
-        labelOptions = labelOptions(
-          style = list("font-weight" = "normal", padding = "3px 8px"),
-          textsize = "15px",
-          direction = "auto"
+    # Base map with professional styling
+    map_base <- leaflet(map_data) %>%
+      addProviderTiles(providers$CartoDB.PositronNoLabels,
+                       options = providerTileOptions(opacity = 0.9)) %>%
+      addProviderTiles(providers$CartoDB.PositronOnlyLabels) %>%
+      setView(lng = mean(map_data$LONGITUDE, na.rm = TRUE), 
+              lat = mean(map_data$LATITUDE, na.rm = TRUE), 
+              zoom = 6)
+    
+    # Add shapefile polygons if available
+    if(!is.null(sovi_peta) && inherits(sovi_peta, "sf")) {
+      map_base <- map_base %>%
+        addPolygons(
+          data = sovi_peta,
+          fillColor = ~pal_poverty(POVERTY),
+          fillOpacity = 0.7,
+          color = "#FFFFFF",
+          weight = 1,
+          opacity = 0.8,
+          highlightOptions = highlightOptions(
+            weight = 2,
+            color = "#2C3E50",
+            fillOpacity = 0.9,
+            bringToFront = TRUE
+          ),
+          label = ~lapply(paste(
+            "<div style='font-size: 12px;'>",
+            "<strong style='color: #2C3E50;'>District Code:</strong>", DISTRICTCODE, "<br/>",
+            "<strong style='color: #2C3E50;'>Kemiskinan:</strong>", round(POVERTY, 2), "%<br/>",
+            "<strong style='color: #2C3E50;'>Pendidikan Rendah:</strong>", round(LOWEDU, 2), "%<br/>",
+            "<strong style='color: #2C3E50;'>Anak-anak:</strong>", round(CHILDREN, 2), "%<br/>",
+            "<strong style='color: #2C3E50;'>Lansia:</strong>", round(ELDERLY, 2), "%<br/>",
+            "<strong style='color: #2C3E50;'>Disabilitas:</strong>", round(DISABILITY, 2), "%",
+            "</div>"
+          ), HTML),
+          labelOptions = labelOptions(
+            style = list(
+              "font-weight" = "normal", 
+              "padding" = "8px 12px",
+              "background" = "rgba(255,255,255,0.95)",
+              "border" = "1px solid #2C3E50",
+              "border-radius" = "4px"
+            ),
+            textsize = "13px",
+            direction = "auto"
+          )
         )
-      ) %>%
+    } else {
+      # Use circle markers if no shapefile
+      map_base <- map_base %>%
+        addCircleMarkers(
+          lng = ~LONGITUDE,
+          lat = ~LATITUDE,
+          radius = 8,
+          fillColor = ~pal_poverty(POVERTY),
+          color = "#FFFFFF",
+          weight = 2,
+          opacity = 1,
+          fillOpacity = 0.8,
+          label = ~lapply(paste(
+            "<div style='font-size: 12px;'>",
+            "<strong style='color: #2C3E50;'>District Code:</strong>", DISTRICTCODE, "<br/>",
+            "<strong style='color: #2C3E50;'>Kemiskinan:</strong>", round(POVERTY, 2), "%<br/>",
+            "<strong style='color: #2C3E50;'>Pendidikan Rendah:</strong>", round(LOWEDU, 2), "%<br/>",
+            "<strong style='color: #2C3E50;'>Anak-anak:</strong>", round(CHILDREN, 2), "%<br/>",
+            "<strong style='color: #2C3E50;'>Lansia:</strong>", round(ELDERLY, 2), "%<br/>",
+            "<strong style='color: #2C3E50;'>Disabilitas:</strong>", round(DISABILITY, 2), "%",
+            "</div>"
+          ), HTML),
+          labelOptions = labelOptions(
+            style = list(
+              "font-weight" = "normal", 
+              "padding" = "8px 12px",
+              "background" = "rgba(255,255,255,0.95)",
+              "border" = "1px solid #2C3E50",
+              "border-radius" = "4px"
+            ),
+            textsize = "13px",
+            direction = "auto"
+          )
+        )
+    }
+    
+    # Add professional legend
+    map_base %>%
       addLegend(
-        pal = pal,
+        pal = pal_poverty,
         values = ~POVERTY,
-        opacity = 0.7,
-        title = "Tingkat Kemiskinan (%)",
-        position = "bottomright"
-      )
+        opacity = 0.8,
+        title = "<strong style='color: #2C3E50;'>Tingkat Kemiskinan (%)</strong>",
+        position = "bottomright",
+        labFormat = labelFormat(suffix = "%", digits = 1)
+      ) %>%
+      addScaleBar(position = "bottomleft", options = scaleBarOptions(metric = TRUE, imperial = FALSE))
   })
   
   # Beranda interpretation
@@ -380,20 +496,65 @@ server <- function(input, output, session) {
     total_obs <- nrow(sovi_data)
     total_vars <- ncol(sovi_data)
     completeness <- round(sum(complete.cases(sovi_data))/nrow(sovi_data) * 100, 1)
+    
+    # Calculate comprehensive statistics
     avg_poverty <- round(mean(sovi_data$POVERTY, na.rm = TRUE), 2)
     avg_education <- round(mean(sovi_data$LOWEDU, na.rm = TRUE), 2)
     avg_children <- round(mean(sovi_data$CHILDREN, na.rm = TRUE), 2)
     avg_elderly <- round(mean(sovi_data$ELDERLY, na.rm = TRUE), 2)
+    avg_disability <- round(mean(sovi_data$DISABILITY, na.rm = TRUE), 2)
+    avg_housing <- round(mean(sovi_data$HOUSING, na.rm = TRUE), 2)
+    avg_transport <- round(mean(sovi_data$TRANSPORT, na.rm = TRUE), 2)
+    
+    # Calculate variability indicators
+    cv_poverty <- round(sd(sovi_data$POVERTY, na.rm = TRUE) / mean(sovi_data$POVERTY, na.rm = TRUE) * 100, 1)
+    
+    # Calculate correlations
+    numeric_data <- select_if(sovi_data, is.numeric)
+    if(ncol(numeric_data) >= 2) {
+      cor_matrix <- cor(numeric_data, use = "complete.obs")
+      strongest_cor <- max(abs(cor_matrix[upper.tri(cor_matrix)]), na.rm = TRUE)
+    } else {
+      strongest_cor <- NA
+    }
     
     interpretation <- paste0(
-      "Dashboard ini menyediakan analisis komprehensif untuk dataset SOVI dengan ", total_obs, " observasi dan ", total_vars, " variabel. ",
-      "Tingkat kelengkapan data sebesar ", completeness, "% menunjukkan kualitas data yang ",
-      if(completeness >= 90) "sangat baik" else if(completeness >= 80) "baik" else "perlu perhatian", ". ",
-      "Dataset ini berisi informasi tentang Social Vulnerability Index yang mengukur kerentanan sosial berbagai wilayah. ",
-      "Rata-rata tingkat kemiskinan adalah ", avg_poverty, "%, pendidikan rendah ", avg_education, "%, ",
-      "anak-anak ", avg_children, "%, dan lansia ", avg_elderly, "%. ",
-      "Peta distribusi menunjukkan sebaran geografis data menggunakan koordinat dari matriks jarak yang dapat membantu dalam analisis spasial dan clustering. ",
-      "Dashboard ini dikembangkan untuk ujian Statistika Terapan STIS 2025 dengan mengikuti semua ketentuan yang diberikan dan menyediakan fitur download lengkap untuk semua output."
+      "<div style='line-height: 1.6; text-align: justify;'>",
+      "<h4 style='color: #2C3E50; margin-bottom: 15px;'>Ringkasan Eksekutif Dashboard SOVI</h4>",
+      
+      "<p><strong>Gambaran Dataset:</strong> Dashboard ini menganalisis Social Vulnerability Index (SOVI) dengan ", 
+      format(total_obs, big.mark = ","), " observasi wilayah dan ", total_vars, " variabel pengukuran. ",
+      "Tingkat kelengkapan data mencapai <span style='color: #3498DB; font-weight: bold;'>", completeness, "%</span>, ",
+      "menunjukkan kualitas data yang ", 
+      if(completeness >= 95) "excellent" else if(completeness >= 90) "sangat baik" else if(completeness >= 80) "baik" else "memerlukan perhatian", 
+      " untuk analisis statistik.</p>",
+      
+      "<p><strong>Profil Kerentanan Sosial:</strong> Analisis menunjukkan tingkat kemiskinan rata-rata sebesar ", 
+      "<span style='color: #E74C3C; font-weight: bold;'>", avg_poverty, "%</span> dengan koefisien variasi ", cv_poverty, "%, ",
+      "mengindikasikan ", if(cv_poverty < 15) "variabilitas rendah" else if(cv_poverty < 25) "variabilitas sedang" else "variabilitas tinggi", 
+      " antar wilayah. Pendidikan rendah rata-rata ", avg_education, "%, populasi anak-anak ", avg_children, "%, ",
+      "dan lansia ", avg_elderly, "% memberikan gambaran struktur demografis yang beragam.</p>",
+      
+      "<p><strong>Indikator Tambahan:</strong> Tingkat disabilitas rata-rata ", avg_disability, "%, ",
+      "masalah perumahan ", avg_housing, "%, dan keterbatasan transportasi ", avg_transport, "% ",
+      "melengkapi profil kerentanan sosial yang komprehensif untuk setiap wilayah observasi.</p>",
+      
+      if(!is.na(strongest_cor)) {
+        paste0("<p><strong>Analisis Korelasi:</strong> Korelasi terkuat antar variabel mencapai ", 
+               round(strongest_cor, 3), ", menunjukkan adanya hubungan signifikan yang dapat dianalisis lebih lanjut ",
+               "dalam tab eksplorasi dan analisis regresi.</p>")
+      } else {
+        ""
+      },
+      
+      "<p><strong>Visualisasi Spasial:</strong> Peta interaktif menampilkan distribusi geografis menggunakan ",
+      if(!is.null(sovi_peta)) "data shapefile administratif dengan visualisasi polygon" else "koordinat dari matriks jarak", 
+      " yang memungkinkan analisis pola spasial dan identifikasi cluster kerentanan.</p>",
+      
+      "<p><strong>Kapabilitas Analisis:</strong> Dashboard menyediakan toolkit lengkap untuk analisis statistik meliputi ",
+      "uji asumsi, statistik inferensia, analisis regresi berganda, dan clustering dengan dukungan download hasil ",
+      "dalam format JPG, PDF, dan dokumen untuk keperluan akademik dan penelitian.</p>",
+      "</div>"
     )
     
     HTML(interpretation)
@@ -445,14 +606,85 @@ server <- function(input, output, session) {
     char_vars <- sum(sapply(sovi_data, is.character))
     factor_vars <- sum(sapply(sovi_data, is.factor))
     missing_total <- sum(is.na(sovi_data))
+    total_cells <- nrow(sovi_data) * ncol(sovi_data)
+    missing_pct <- round(missing_total / total_cells * 100, 2)
+    
+    # Calculate data quality metrics
+    outlier_count <- 0
+    numeric_data <- select_if(sovi_data, is.numeric)
+    if(ncol(numeric_data) > 0) {
+      for(col in names(numeric_data)) {
+        Q1 <- quantile(numeric_data[[col]], 0.25, na.rm = TRUE)
+        Q3 <- quantile(numeric_data[[col]], 0.75, na.rm = TRUE)
+        IQR <- Q3 - Q1
+        outliers <- sum(numeric_data[[col]] < (Q1 - 1.5*IQR) | numeric_data[[col]] > (Q3 + 1.5*IQR), na.rm = TRUE)
+        outlier_count <- outlier_count + outliers
+      }
+    }
     
     interpretation <- paste0(
-      "Dataset SOVI terdiri dari ", numeric_vars, " variabel numerik, ", char_vars, " variabel karakter, dan ", factor_vars, " variabel faktor. ",
-      "Total missing values: ", missing_total, " dari ", nrow(sovi_data) * ncol(sovi_data), " total data points. ",
-      "Struktur data menunjukkan bahwa sebagian besar variabel adalah numerik yang cocok untuk analisis statistik. ",
-      "Matriks korelasi menunjukkan hubungan antar variabel numerik yang dapat membantu dalam pemilihan variabel untuk analisis lanjutan. ",
-      "Ringkasan statistik memberikan gambaran distribusi setiap variabel termasuk nilai minimum, maksimum, median, dan kuartil. ",
-      "Data ini siap untuk digunakan dalam berbagai analisis statistik yang tersedia di dashboard sesuai dengan ketentuan ujian STIS 2025."
+      "<div style='background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 20px; border-radius: 10px; margin: 10px 0;'>",
+      
+      "<div style='text-align: center; margin-bottom: 20px;'>",
+      "<h4 style='color: #2C3E50; margin: 0; font-size: 18px;'>Dashboard Manajemen Data SOVI</h4>",
+      "<p style='color: #34495E; margin: 5px 0; font-style: italic;'>Analisis Struktur dan Kualitas Dataset</p>",
+      "</div>",
+      
+      "<div style='display: flex; justify-content: space-around; flex-wrap: wrap; margin-bottom: 20px;'>",
+      
+      "<div style='background: white; padding: 15px; border-radius: 8px; text-align: center; margin: 5px; min-width: 140px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>",
+      "<div style='font-size: 24px; font-weight: bold; color: #3498DB;'>", format(nrow(sovi_data), big.mark = ","), "</div>",
+      "<div style='color: #2C3E50; font-size: 12px;'>Observasi</div>",
+      "</div>",
+      
+      "<div style='background: white; padding: 15px; border-radius: 8px; text-align: center; margin: 5px; min-width: 140px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>",
+      "<div style='font-size: 24px; font-weight: bold; color: #27AE60;'>", numeric_vars, "</div>",
+      "<div style='color: #2C3E50; font-size: 12px;'>Variabel Numerik</div>",
+      "</div>",
+      
+      "<div style='background: white; padding: 15px; border-radius: 8px; text-align: center; margin: 5px; min-width: 140px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>",
+      "<div style='font-size: 24px; font-weight: bold; color: #E74C3C;'>", missing_pct, "%</div>",
+      "<div style='color: #2C3E50; font-size: 12px;'>Missing Values</div>",
+      "</div>",
+      
+      "<div style='background: white; padding: 15px; border-radius: 8px; text-align: center; margin: 5px; min-width: 140px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'>",
+      "<div style='font-size: 24px; font-weight: bold; color: #F39C12;'>", outlier_count, "</div>",
+      "<div style='color: #2C3E50; font-size: 12px;'>Outliers Detected</div>",
+      "</div>",
+      
+      "</div>",
+      
+      "<div style='background: white; padding: 15px; border-radius: 8px; margin-top: 15px;'>",
+      "<h5 style='color: #2C3E50; margin-top: 0;'>Ringkasan Struktur Data</h5>",
+      "<div style='display: grid; grid-template-columns: 1fr 1fr; gap: 15px;'>",
+      
+      "<div>",
+      "<p style='margin: 5px 0; font-size: 14px;'><span style='color: #3498DB; font-weight: bold;'>Komposisi Variabel:</span></p>",
+      "<ul style='margin: 0; padding-left: 20px; font-size: 13px; color: #34495E;'>",
+      "<li>", numeric_vars, " variabel numerik (", round(numeric_vars/ncol(sovi_data)*100, 1), "%)</li>",
+      "<li>", char_vars + factor_vars, " variabel kategorik (", round((char_vars + factor_vars)/ncol(sovi_data)*100, 1), "%)</li>",
+      "</ul>",
+      "</div>",
+      
+      "<div>",
+      "<p style='margin: 5px 0; font-size: 14px;'><span style='color: #27AE60; font-weight: bold;'>Kualitas Data:</span></p>",
+      "<ul style='margin: 0; padding-left: 20px; font-size: 13px; color: #34495E;'>",
+      "<li>Kelengkapan: ", 100 - missing_pct, "% (", if(missing_pct < 5) "excellent" else if(missing_pct < 10) "baik" else "perlu perhatian", ")</li>",
+      "<li>Outliers: ", round(outlier_count/(nrow(sovi_data)*numeric_vars)*100, 2), "% dari data numerik</li>",
+      "</ul>",
+      "</div>",
+      
+      "</div>",
+      "</div>",
+      
+      "<div style='background: #3498DB; color: white; padding: 12px; border-radius: 8px; text-align: center; margin-top: 15px;'>",
+      "<p style='margin: 0; font-size: 14px; font-weight: 500;'>",
+      "Dataset siap untuk analisis dengan kualitas ", if(missing_pct < 5 && outlier_count < nrow(sovi_data)*0.05) "tinggi" else if(missing_pct < 10) "baik" else "standar", 
+      " dan mendukung semua metode statistik yang tersedia dalam dashboard.",
+      "</p>",
+      "</div>",
+      
+      "</div>"
     )
     
     HTML(interpretation)
@@ -904,10 +1136,7 @@ server <- function(input, output, session) {
         names(distance_data)[1] <- "DISTRICTCODE"
         map_data <- merge(sovi_data, distance_data, by = "DISTRICTCODE", all.x = TRUE)
       } else {
-        # Fallback: create dummy coordinates
-        map_data <- sovi_data
-        map_data$LONGITUDE <- runif(nrow(map_data), 95, 141)
-        map_data$LATITUDE <- runif(nrow(map_data), -11, 6)
+        stop("Data distance tidak memiliki format yang sesuai untuk koordinat.")
       }
     }
     
@@ -915,10 +1144,7 @@ server <- function(input, output, session) {
     map_data <- map_data[!is.na(map_data$LONGITUDE) & !is.na(map_data$LATITUDE), ]
     
     if(nrow(map_data) == 0) {
-      # Final fallback: create dummy coordinates
-      map_data <- sovi_data
-      map_data$LONGITUDE <- runif(nrow(map_data), 95, 141)
-      map_data$LATITUDE <- runif(nrow(map_data), -11, 6)
+      stop("Tidak ada data koordinat yang valid untuk ditampilkan di peta eksplorasi.")
     }
     
     var_data <- map_data[[input$map_variable]]
@@ -1116,12 +1342,27 @@ server <- function(input, output, session) {
     scaled_data <- scale(cluster_data)
     
     # Use distance matrix if selected and available
-    if(input$use_distance_matrix && nrow(distance_data) > 0) {
-      # Create proper distance matrix from distance_data
-      # Assuming distance_data is a matrix format with first column as ID
+    if(input$use_distance_matrix && exists("distance_data") && !is.null(distance_data) && nrow(distance_data) > 0) {
+      # Handle distance matrix properly - ensure it's truly a distance matrix
       if(ncol(distance_data) > 2) {
-        dist_matrix_data <- distance_data[, -1]  # Remove ID column
-        dist_matrix <- as.dist(as.matrix(dist_matrix_data))
+        # If distance_data has multiple columns, treat as coordinate data and calculate distances
+        if("LONGITUDE" %in% names(distance_data) && "LATITUDE" %in% names(distance_data)) {
+          coord_data <- distance_data[, c("LONGITUDE", "LATITUDE")]
+          coord_data <- na.omit(coord_data)
+          if(nrow(coord_data) >= nrow(scaled_data)) {
+            dist_matrix <- dist(coord_data[1:nrow(scaled_data), ])
+          } else {
+            dist_matrix <- dist(scaled_data)
+          }
+        } else {
+          # Assume it's a proper distance matrix in tabular form
+          dist_data <- distance_data[, -1]  # Remove ID column
+          if(is.matrix(dist_data) || (is.data.frame(dist_data) && nrow(dist_data) == ncol(dist_data))) {
+            dist_matrix <- as.dist(as.matrix(dist_data))
+          } else {
+            dist_matrix <- dist(scaled_data)
+          }
+        }
       } else {
         dist_matrix <- dist(scaled_data)
       }
@@ -1287,20 +1528,14 @@ server <- function(input, output, session) {
         names(distance_data)[1] <- "DISTRICTCODE"
         map_data <- merge(sovi_data, distance_data, by = "DISTRICTCODE", all.x = TRUE)
       } else {
-        # Fallback: create dummy coordinates
-        map_data <- sovi_data
-        map_data$LONGITUDE <- runif(nrow(map_data), 95, 141)
-        map_data$LATITUDE <- runif(nrow(map_data), -11, 6)
+        stop("Data distance tidak memiliki format yang sesuai untuk pemetaan clustering.")
       }
     }
     
     map_data <- map_data[!is.na(map_data$LONGITUDE) & !is.na(map_data$LATITUDE), ]
     
     if(nrow(map_data) == 0) {
-      # Final fallback
-      map_data <- sovi_data
-      map_data$LONGITUDE <- runif(nrow(map_data), 95, 141)
-      map_data$LATITUDE <- runif(nrow(map_data), -11, 6)
+      stop("Tidak ada data koordinat yang valid untuk pemetaan clustering.")
     }
     
     # Add cluster assignments
@@ -1380,14 +1615,30 @@ server <- function(input, output, session) {
     
     var_data <- sovi_data[[input$normality_variable]]
     
-    # Apply grouping if selected
+    # Apply user-defined filtering/grouping if selected
     if(input$normality_group != "none") {
       group_data <- sovi_data[[input$normality_group]]
+      
+      # Allow user to select specific groups for analysis
+      if(exists("input") && !is.null(input$selected_groups) && length(input$selected_groups) > 0) {
+        selected_indices <- which(group_data %in% input$selected_groups)
+        var_data <- var_data[selected_indices]
+        group_data <- group_data[selected_indices]
+      }
+      
       # Filter for complete cases
       complete_cases <- complete.cases(var_data, group_data)
       var_data <- var_data[complete_cases]
       group_data <- group_data[complete_cases]
     } else {
+      # Apply sample size filtering if specified
+      if(exists("input") && !is.null(input$sample_size_filter) && input$sample_size_filter > 0) {
+        if(length(var_data) > input$sample_size_filter) {
+          set.seed(123)
+          sample_indices <- sample(1:length(var_data), input$sample_size_filter)
+          var_data <- var_data[sample_indices]
+        }
+      }
       var_data <- var_data[!is.na(var_data)]
     }
     
@@ -1663,6 +1914,13 @@ server <- function(input, output, session) {
     
     var_data <- sovi_data[[input$homogeneity_variable]]
     group_data <- sovi_data[[input$homogeneity_group]]
+    
+    # Apply user-defined group filtering
+    if(exists("input") && !is.null(input$selected_homogeneity_groups) && length(input$selected_homogeneity_groups) > 0) {
+      selected_indices <- which(group_data %in% input$selected_homogeneity_groups)
+      var_data <- var_data[selected_indices]
+      group_data <- group_data[selected_indices]
+    }
     
     # Filter complete cases
     complete_cases <- complete.cases(var_data, group_data)
