@@ -29,6 +29,7 @@ library(stats)
 library(sf)
 library(cluster)
 library(factoextra)
+library(lmtest)
 
 # Source UI and Server
 source("ui.R")

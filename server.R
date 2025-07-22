@@ -4,6 +4,118 @@
 
 server <- function(input, output, session) {
   
+  # =====================================================
+  # DATA PREPARATION AND LOADING
+  # =====================================================
+  
+  # Create sample SOVI data if not available
+  if(!exists("sovi_data") || is.null(sovi_data)) {
+    set.seed(123)
+    n <- 500
+    
+    sovi_data <<- data.frame(
+      DISTRICTCODE = 1101:(1100 + n),
+      POVERTY = round(runif(n, 5, 45), 2),
+      LOWEDU = round(runif(n, 10, 60), 2),
+      CHILDREN = round(runif(n, 15, 35), 2),
+      ELDERLY = round(runif(n, 5, 25), 2),
+      DISABILITY = round(runif(n, 2, 15), 2),
+      MINORITY = round(runif(n, 1, 20), 2),
+      HOUSING = round(runif(n, 10, 40), 2),
+      TRANSPORT = round(runif(n, 5, 30), 2),
+      EMPLOYMENT = round(runif(n, 8, 35), 2),
+      INCOME = round(runif(n, 20000, 80000), 0),
+      stringsAsFactors = FALSE
+    )
+    
+    # Add categorical variables
+    sovi_data$SOVI_Category <<- cut(
+      sovi_data$POVERTY + sovi_data$LOWEDU + sovi_data$CHILDREN, 
+      breaks = 3, 
+      labels = c("Low", "Medium", "High")
+    )
+    
+    sovi_data$Population_Size <<- cut(
+      runif(n, 1000, 100000), 
+      breaks = 3, 
+      labels = c("Small", "Medium", "Large")
+    )
+    
+    sovi_data$Economic_Status <<- sample(
+      c("Developing", "Developed", "Underdeveloped"), 
+      n, 
+      replace = TRUE
+    )
+    
+    sovi_data$Age_Group <<- cut(
+      sovi_data$CHILDREN + sovi_data$ELDERLY, 
+      breaks = 3, 
+      labels = c("Young", "Mixed", "Aging")
+    )
+    
+    sovi_data$Education_Level <<- cut(
+      100 - sovi_data$LOWEDU, 
+      breaks = 3, 
+      labels = c("Low", "Medium", "High")
+    )
+  }
+  
+  # Load shapefile data if available
+  if(!exists("sovi_peta") || is.null(sovi_peta)) {
+    tryCatch({
+      # Try to load shapefile
+      shp_path <- "D:/STIS SEM 3/SIG/UTS/UTS-20241114T023840Z-001/UTS/Administrasi_Kabupaten.shp"
+      
+      if(file.exists(shp_path)) {
+        library(sf)
+        peta_kabupaten <- st_read(shp_path, quiet = TRUE)
+        
+        # Process shapefile data as requested
+        peta_kabupaten <- peta_kabupaten %>%
+          mutate(
+            kdprov = as.numeric(as.character(kdprov)),
+            kdkab = as.numeric(as.character(kdkab)),
+            DISTRICTCODE = as.numeric(paste0(kdprov, sprintf("%02d", kdkab)))
+          )
+        
+        # Merge with SOVI data
+        sovi_peta <<- left_join(peta_kabupaten, sovi_data, by = "DISTRICTCODE")
+        
+        # Extract coordinates for distance_data
+        coords <- st_coordinates(st_centroid(sovi_peta))
+        distance_data <<- data.frame(
+          DISTRICTCODE = sovi_peta$DISTRICTCODE,
+          LONGITUDE = coords[,1],
+          LATITUDE = coords[,2],
+          stringsAsFactors = FALSE
+        )
+      } else {
+        sovi_peta <<- NULL
+        # Create coordinate data
+        set.seed(123)
+        distance_data <<- data.frame(
+          DISTRICTCODE = sovi_data$DISTRICTCODE,
+          LONGITUDE = runif(nrow(sovi_data), 95, 141),
+          LATITUDE = runif(nrow(sovi_data), -11, 6),
+          stringsAsFactors = FALSE
+        )
+      }
+    }, error = function(e) {
+      sovi_peta <<- NULL
+      # Create fallback coordinate data
+      set.seed(123)
+      distance_data <<- data.frame(
+        DISTRICTCODE = sovi_data$DISTRICTCODE,
+        LONGITUDE = runif(nrow(sovi_data), 95, 141),
+        LATITUDE = runif(nrow(sovi_data), -11, 6),
+        stringsAsFactors = FALSE
+      )
+    })
+  }
+  
+  # Color palette
+  colors <- c("#2E86C1", "#E74C3C", "#F39C12", "#27AE60", "#8E44AD", "#F1C40F", "#E67E22", "#1ABC9C")
+  
   # Reactive values
   values <- reactiveValues(
     regression_model = NULL,
@@ -141,7 +253,7 @@ server <- function(input, output, session) {
     p <- ggplot(sovi_data, aes(x = POVERTY)) +
       geom_histogram(bins = 30, fill = colors[4], alpha = 0.7, color = "white") +
       geom_density(aes(y = after_stat(density) * length(POVERTY) * diff(range(POVERTY, na.rm = TRUE))/30),
-                   color = colors[1], size = 1.2) +
+                   color = colors[1], linewidth = 1.2) +
       labs(title = "Distribusi Tingkat Kemiskinan",
            x = "Tingkat Kemiskinan (%)", y = "Frekuensi") +
       theme_minimal() +
@@ -159,7 +271,7 @@ server <- function(input, output, session) {
     p <- ggplot(sovi_data, aes(x = LOWEDU)) +
       geom_histogram(bins = 30, fill = colors[5], alpha = 0.7, color = "white") +
       geom_density(aes(y = after_stat(density) * length(LOWEDU) * diff(range(LOWEDU, na.rm = TRUE))/30),
-                   color = colors[2], size = 1.2) +
+                   color = colors[2], linewidth = 1.2) +
       labs(title = "Distribusi Pendidikan Rendah",
            x = "Pendidikan Rendah (%)", y = "Frekuensi") +
       theme_minimal() +
@@ -177,7 +289,7 @@ server <- function(input, output, session) {
     p <- ggplot(sovi_data, aes(x = CHILDREN)) +
       geom_histogram(bins = 30, fill = colors[6], alpha = 0.7, color = "white") +
       geom_density(aes(y = after_stat(density) * length(CHILDREN) * diff(range(CHILDREN, na.rm = TRUE))/30),
-                   color = colors[3], size = 1.2) +
+                   color = colors[3], linewidth = 1.2) +
       labs(title = "Distribusi Anak-anak",
            x = "Anak-anak (%)", y = "Frekuensi") +
       theme_minimal() +
@@ -191,16 +303,26 @@ server <- function(input, output, session) {
       config(displayModeBar = FALSE)
   })
   
-  # Beranda map using distance data coordinates (FIXED)
+  # Beranda map using shapefile or distance data coordinates  
   output$beranda_map <- renderLeaflet({
-    # Ensure proper column matching for merge
-    if("DISTRICTCODE" %in% names(sovi_data) && "DISTRICTCODE" %in% names(distance_data)) {
-      map_data <- merge(sovi_data, distance_data, by = "DISTRICTCODE", all.x = TRUE)
+    # Use shapefile data if available, otherwise use distance data
+    if(!is.null(sovi_peta) && "LONGITUDE" %in% names(sovi_peta)) {
+      map_data <- sovi_peta
+      # Extract coordinates if they're not already columns
+      if(!"LONGITUDE" %in% names(map_data) || !"LATITUDE" %in% names(map_data)) {
+        coords <- st_coordinates(st_centroid(st_geometry(map_data)))
+        map_data$LONGITUDE <- coords[,1]
+        map_data$LATITUDE <- coords[,2]
+      }
     } else {
-      # Alternative merge strategy if column names don't match
-      # Assuming first column of distance_data is the ID
-      names(distance_data)[1] <- "DISTRICTCODE"
-      map_data <- merge(sovi_data, distance_data, by = "DISTRICTCODE", all.x = TRUE)
+      # Use distance_data for coordinates
+      if("DISTRICTCODE" %in% names(sovi_data) && "DISTRICTCODE" %in% names(distance_data)) {
+        map_data <- merge(sovi_data, distance_data, by = "DISTRICTCODE", all.x = TRUE)
+      } else {
+        map_data <- sovi_data
+        map_data$LONGITUDE <- runif(nrow(map_data), 95, 141)
+        map_data$LATITUDE <- runif(nrow(map_data), -11, 6)
+      }
     }
     
     # Filter out rows with missing coordinates
@@ -668,7 +790,7 @@ server <- function(input, output, session) {
           theme_minimal()
       } else if(input$plot_type == "density") {
         p <- ggplot(data.frame(x = var_data), aes(x = x)) +
-          geom_density(fill = colors[6], alpha = 0.7, color = colors[1]) +
+          geom_density(fill = colors[6], alpha = 0.7, color = colors[1], linewidth = 1) +
           labs(title = paste("Density Plot", input$plot_variable), x = input$plot_variable, y = "Density") +
           theme_minimal()
       } else if(input$plot_type == "violin") {
@@ -937,6 +1059,7 @@ server <- function(input, output, session) {
       if(n_vars >= 2) {
         cat("Uji Signifikansi Korelasi:\n")
         cat("========================\n")
+              if(n_vars > 1) {
         for(i in 1:(n_vars-1)) {
           for(j in (i+1):n_vars) {
             var1 <- input$corr_variables[i]
@@ -948,6 +1071,7 @@ server <- function(input, output, session) {
             cat(paste("  Signifikan:", ifelse(test_result$p.value < 0.05, "Ya", "Tidak"), "\n\n"))
           }
         }
+      }
       }
     })
     
@@ -1045,15 +1169,16 @@ server <- function(input, output, session) {
     # Elbow method plot
     output$elbow_plot <- renderPlotly({
       if(input$cluster_method == "kmeans") {
-        wss <- sapply(1:10, function(k) {
+        max_k <- min(10, nrow(scaled_data) - 1)
+        wss <- sapply(1:max_k, function(k) {
           kmeans(scaled_data, centers = k, nstart = 25)$tot.withinss
         })
         
-        elbow_data <- data.frame(k = 1:10, wss = wss)
+        elbow_data <- data.frame(k = 1:max_k, wss = wss)
         
         p <- ggplot(elbow_data, aes(x = k, y = wss)) +
-          geom_line(color = colors[4], size = 1) +
-          geom_point(color = colors[1], size = 3) +
+                  geom_line(color = colors[4], linewidth = 1) +
+        geom_point(color = colors[1], size = 3) +
           geom_vline(xintercept = input$n_clusters, color = colors[2], linetype = "dashed") +
           labs(title = "Elbow Method for Optimal k", x = "Number of Clusters (k)", y = "Within-cluster Sum of Squares") +
           theme_minimal()
@@ -1344,10 +1469,10 @@ server <- function(input, output, session) {
       if(input$normality_group == "none") {
         p <- ggplot(data.frame(x = var_data), aes(x = x)) +
           geom_histogram(aes(y = after_stat(density)), bins = 30, fill = colors[4], alpha = 0.7, color = "white") +
-          stat_function(fun = dnorm,
-                        args = list(mean = mean(var_data, na.rm = TRUE),
-                                    sd = sd(var_data, na.rm = TRUE)),
-                        color = colors[1], size = 1) +
+                  stat_function(fun = dnorm,
+                      args = list(mean = mean(var_data, na.rm = TRUE),
+                                  sd = sd(var_data, na.rm = TRUE)),
+                      color = colors[1], linewidth = 1) +
           labs(title = paste("Histogram dengan Kurva Normal -", input$normality_variable),
                x = input$normality_variable, y = "Densitas") +
           theme_minimal()
@@ -1636,8 +1761,8 @@ server <- function(input, output, session) {
       if(input$onesample_group == "none") {
         p <- ggplot(data.frame(x = var_data), aes(x = x)) +
           geom_histogram(bins = 30, fill = colors[4], alpha = 0.7, color = "white") +
-          geom_vline(xintercept = input$mu_hypothesis, color = colors[1], linetype = "dashed", size = 1) +
-          geom_vline(xintercept = mean(var_data, na.rm = TRUE), color = colors[2], size = 1) +
+                  geom_vline(xintercept = input$mu_hypothesis, color = colors[1], linetype = "dashed", linewidth = 1) +
+        geom_vline(xintercept = mean(var_data, na.rm = TRUE), color = colors[2], linewidth = 1) +
           labs(title = paste("Distribusi", input$onesample_variable),
                subtitle = paste("Garis putus-putus: μ₀ =", input$mu_hypothesis, ", Garis solid: x̄ =", round(mean(var_data, na.rm = TRUE), 3)),
                x = input$onesample_variable, y = "Frekuensi") +
@@ -1650,7 +1775,7 @@ server <- function(input, output, session) {
         
         p <- ggplot(plot_data, aes(x = value, fill = group)) +
           geom_histogram(bins = 30, alpha = 0.7, position = "identity") +
-          geom_vline(xintercept = input$mu_hypothesis, color = colors[1], linetype = "dashed", size = 1) +
+          geom_vline(xintercept = input$mu_hypothesis, color = colors[1], linetype = "dashed", linewidth = 1) +
           scale_fill_manual(values = colors[4:6]) +
           labs(title = paste("Distribusi", input$onesample_variable, "per Kelompok"),
                x = input$onesample_variable, y = "Frekuensi") +
@@ -1830,7 +1955,7 @@ server <- function(input, output, session) {
         
         p <- ggplot(plot_data, aes(x = Category, y = Proportion, fill = Category)) +
           geom_bar(stat = "identity", alpha = 0.7) +
-          geom_hline(yintercept = input$prop_hypothesis, color = colors[1], linetype = "dashed", size = 1) +
+          geom_hline(yintercept = input$prop_hypothesis, color = colors[1], linetype = "dashed", linewidth = 1) +
           scale_fill_manual(values = colors[4:7]) +
           labs(title = paste("Proporsi", input$prop_variable),
                subtitle = paste("Garis putus-putus: p₀ =", input$prop_hypothesis),
@@ -1846,7 +1971,7 @@ server <- function(input, output, session) {
         
         p <- ggplot(plot_data, aes(x = Group, y = Proportion, fill = Category)) +
           geom_bar(stat = "identity", position = "dodge", alpha = 0.7) +
-          geom_hline(yintercept = input$prop_hypothesis, color = colors[1], linetype = "dashed", size = 1) +
+          geom_hline(yintercept = input$prop_hypothesis, color = colors[1], linetype = "dashed", linewidth = 1) +
           scale_fill_manual(values = colors[4:7]) +
           labs(title = paste("Proporsi", input$prop_variable, "per", input$prop_group),
                x = input$prop_group, y = "Proporsi") +
@@ -2148,7 +2273,7 @@ server <- function(input, output, session) {
         summarise(mean_value = mean(value, na.rm = TRUE), .groups = 'drop')
       
       p <- ggplot(interaction_data, aes(x = factor1, y = mean_value, color = factor2, group = factor2)) +
-        geom_line(size = 1) +
+        geom_line(linewidth = 1) +
         geom_point(size = 3) +
         scale_color_manual(values = colors[4:6]) +
         labs(title = paste("Interaction Plot:", input$anova2_variable),
@@ -2327,7 +2452,7 @@ server <- function(input, output, session) {
       
       p <- ggplot(plot_data, aes(x = Fitted, y = Actual)) +
         geom_point(alpha = 0.6, color = colors[4]) +
-        geom_abline(slope = 1, intercept = 0, color = colors[1], size = 1) +
+        geom_abline(slope = 1, intercept = 0, color = colors[1], linewidth = 1) +
         geom_smooth(method = "lm", se = FALSE, color = colors[2], linetype = "dashed") +
         labs(title = "Fitted vs Actual Values",
              x = "Fitted Values", y = "Actual Values") +
@@ -3179,7 +3304,7 @@ server <- function(input, output, session) {
         plot(sovi_data[[numeric_vars[1]]], sovi_data[[numeric_vars[2]]], 
              main = paste("Korelasi", numeric_vars[1], "vs", numeric_vars[2]),
              xlab = numeric_vars[1], ylab = numeric_vars[2], 
-             col = colors[4], pch = 19, alpha = 0.6)
+             col = colors[4], pch = 19)
         abline(lm(sovi_data[[numeric_vars[2]]] ~ sovi_data[[numeric_vars[1]]]), col = colors[1], lwd = 2)
       }
       
@@ -3190,10 +3315,11 @@ server <- function(input, output, session) {
         abline(v = mean(sovi_data[[numeric_vars[1]]], na.rm = TRUE), col = colors[1], lwd = 2, lty = 2)
         
         # Density plot
-        plot(density(sovi_data[[numeric_vars[1]]], na.rm = TRUE), 
+        density_data <- density(sovi_data[[numeric_vars[1]]], na.rm = TRUE)
+        plot(density_data, 
              main = paste("Density Plot", numeric_vars[1]), 
              col = colors[1], lwd = 2, xlab = numeric_vars[1])
-        polygon(density(sovi_data[[numeric_vars[1]]], na.rm = TRUE), col = adjustcolor(colors[5], alpha = 0.3))
+        polygon(density_data, col = adjustcolor(colors[5], alpha = 0.3))
         
         # Q-Q plot for normality
         qqnorm(sovi_data[[numeric_vars[1]]], main = paste("Q-Q Plot", numeric_vars[1]), col = colors[4])
