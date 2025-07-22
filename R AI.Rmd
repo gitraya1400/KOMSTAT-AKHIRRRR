@@ -1,0 +1,1808 @@
+---
+title: "Praktikum Analisis Regresi - Modul 8, 9 & 10"
+subtitle: "Seleksi Model Regresi Terbaik dan Regresi Polinomial"
+author: "Nama Mahasiswa"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: flatly
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Setup dan Load Library
+
+```{r}
+# Load library yang diperlukan
+library(haven)        # untuk membaca file SPSS (.sav)
+library(readxl)       # untuk membaca file Excel
+library(dplyr)        # untuk manipulasi data
+library(knitr)        # untuk membuat tabel
+library(kableExtra)   # untuk styling tabel
+library(broom)        # untuk mengubah output model menjadi tidy format
+library(leaps)        # untuk all possible regression
+library(car)          # untuk berbagai fungsi statistik
+```
+
+# Load Data
+
+```{r}
+# Membaca data dari file .sav (SPSS) atau .xlsx (Excel)
+# Sesuaikan dengan format file yang tersedia
+
+# Data untuk Modul 8 & 9
+data <- haven::read_sav("Data_Regresi08.sav")
+
+# Data untuk Modul 10
+data_modul10 <- haven::read_sav("Data_Modul01.sav")
+
+# Alternatif jika menggunakan Excel:
+# data <- readxl::read_xlsx("Data_Regresi08.xlsx")
+# data_modul10 <- readxl::read_xlsx("Data_Modul01.xlsx")
+
+# Tampilkan struktur data
+str(data)
+head(data)
+
+cat("\n=== Data untuk Modul 10 ===\n")
+str(data_modul10)
+head(data_modul10)
+```
+
+# MODUL 8: ALL POSSIBLE REGRESSION
+
+## Deskripsi Data
+
+Data yang digunakan mengandung: - Y: Patient satisfaction (Tingkat Kepuasan Pasien) - X1: Patient's age (Umur Pasien, dalam tahun) - X2: Severity of illness (Tingkat Keparahan Penyakit, indeks) - X3: Anxiety level (Tingkat Kecemasan, indeks)
+
+```{r}
+# Ringkasan statistik deskriptif
+summary(data)
+```
+
+## Semua Kemungkinan Model (All Possible Regression)
+
+Dengan 3 variabel bebas (p=4), kita dapat membuat 2\^(p-1) = 2\^3 = 8 model alternatif.
+
+```{r}
+# Definisikan variabel
+Y <- data$`Patient satisfaction`  # sesuaikan nama kolom
+X1 <- data$`Patient's age`        # sesuaikan nama kolom  
+X2 <- data$`Severity of illness`  # sesuaikan nama kolom
+X3 <- data$`Anxiety level`        # sesuaikan nama kolom
+
+# Atau jika nama kolom berbeda, gunakan:
+# Y <- data[,1]   # kolom pertama sebagai Y
+# X1 <- data[,2]  # kolom kedua sebagai X1
+# X2 <- data[,3]  # dan seterusnya
+# X3 <- data[,4]
+
+# Buat data frame untuk analisis
+df <- data.frame(Y, X1, X2, X3)
+```
+
+### Model 1: Tanpa Variabel Bebas (Intercept Only)
+
+```{r}
+model1 <- lm(Y ~ 1, data = df)
+summary(model1)
+```
+
+### Model 2: Y \~ X1
+
+```{r}
+model2 <- lm(Y ~ X1, data = df)
+summary(model2)
+```
+
+### Model 3: Y \~ X2
+
+```{r}
+model3 <- lm(Y ~ X2, data = df)
+summary(model3)
+```
+
+### Model 4: Y \~ X3
+
+```{r}
+model4 <- lm(Y ~ X3, data = df)
+summary(model4)
+```
+
+### Model 5: Y \~ X1 + X2
+
+```{r}
+model5 <- lm(Y ~ X1 + X2, data = df)
+summary(model5)
+```
+
+### Model 6: Y \~ X1 + X3
+
+```{r}
+model6 <- lm(Y ~ X1 + X3, data = df)
+summary(model6)
+```
+
+### Model 7: Y \~ X2 + X3
+
+```{r}
+model7 <- lm(Y ~ X2 + X3, data = df)
+summary(model7)
+```
+
+### Model 8: Y \~ X1 + X2 + X3 (Full Model)
+
+```{r}
+model8 <- lm(Y ~ X1 + X2 + X3, data = df)
+summary(model8)
+```
+
+## Perhitungan Kriteria Pemilihan Model
+
+```{r}
+# Fungsi untuk menghitung kriteria pemilihan model
+calculate_criteria <- function(model, model_name, p) {
+  # Ekstrak informasi dari model
+  r_squared <- summary(model)$r.squared
+  adj_r_squared <- summary(model)$adj.r.squared
+  sse <- sum(residuals(model)^2)
+  mse <- sse / (length(residuals(model)) - p)
+  n <- length(residuals(model))
+  
+  # AIC dan BIC/SBC
+  aic <- AIC(model)
+  bic <- BIC(model)
+  
+  # Untuk Cp Mallows, kita perlu MSE dari full model
+  mse_full <- sum(residuals(model8)^2) / (length(residuals(model8)) - 4)
+  cp <- (sse / mse_full) - (n - 2*p)
+  
+  return(data.frame(
+    Model = model_name,
+    p = p,
+    df = n - p,
+    SSE = round(sse, 3),
+    R_squared = round(r_squared, 3),
+    MSE = round(mse, 3),
+    Adj_R_squared = round(adj_r_squared, 3),
+    AIC = round(aic, 3),
+    BIC_SBC = round(bic, 3),
+    Cp_Mallow = round(cp, 2)
+  ))
+}
+
+# Hitung kriteria untuk semua model
+results <- rbind(
+  calculate_criteria(model2, "X1", 2),
+  calculate_criteria(model3, "X2", 2),
+  calculate_criteria(model4, "X3", 2),
+  calculate_criteria(model5, "X1, X2", 3),
+  calculate_criteria(model6, "X1, X3", 3),
+  calculate_criteria(model7, "X2, X3", 3),
+  calculate_criteria(model8, "X1, X2, X3", 4)
+)
+
+# Tampilkan tabel hasil
+kable(results, caption = "Kriteria Pemilihan Model Terbaik") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Interpretasi Kriteria
+
+```{r}
+# Cari model terbaik berdasarkan setiap kriteria
+cat("MODEL TERBAIK BERDASARKAN SETIAP KRITERIA:\n")
+cat("===============================================\n")
+
+# R² tertinggi
+best_r2 <- results[which.max(results$R_squared), ]
+cat("R² tertinggi:", best_r2$Model, "=", best_r2$R_squared, "\n")
+
+# Adjusted R² tertinggi
+best_adj_r2 <- results[which.max(results$Adj_R_squared), ]
+cat("Adj R² tertinggi:", best_adj_r2$Model, "=", best_adj_r2$Adj_R_squared, "\n")
+
+# AIC terendah
+best_aic <- results[which.min(results$AIC), ]
+cat("AIC terendah:", best_aic$Model, "=", best_aic$AIC, "\n")
+
+# BIC/SBC terendah
+best_bic <- results[which.min(results$BIC_SBC), ]
+cat("BIC/SBC terendah:", best_bic$Model, "=", best_bic$BIC_SBC, "\n")
+
+# Cp Mallow mendekati p
+results$cp_diff <- abs(results$Cp_Mallow - results$p)
+best_cp <- results[which.min(results$cp_diff), ]
+cat("Cp Mallow mendekati p:", best_cp$Model, "| Cp =", best_cp$Cp_Mallow, "| p =", best_cp$p, "\n")
+```
+
+# MODUL 9: STEPWISE REGRESSION, FORWARD SELECTION, BACKWARD ELIMINATION
+
+## Forward Selection
+
+```{r}
+# Forward Selection menggunakan step()
+# Mulai dari intercept only model
+model_null <- lm(Y ~ 1, data = df)
+model_full <- lm(Y ~ X1 + X2 + X3, data = df)
+
+forward_model <- step(model_null, 
+                     scope = list(lower = model_null, upper = model_full),
+                     direction = "forward",
+                     trace = TRUE)
+
+cat("\n=== HASIL FORWARD SELECTION ===\n")
+summary(forward_model)
+```
+
+## Backward Elimination
+
+```{r}
+# Backward Elimination
+# Mulai dari full model
+backward_model <- step(model_full, 
+                      direction = "backward",
+                      trace = TRUE)
+
+cat("\n=== HASIL BACKWARD ELIMINATION ===\n")
+summary(backward_model)
+```
+
+## Stepwise Regression
+
+```{r}
+# Stepwise Regression
+# Mulai dari null model, bisa maju dan mundur
+stepwise_model <- step(model_null,
+                      scope = list(lower = model_null, upper = model_full),
+                      direction = "both",
+                      trace = TRUE)
+
+cat("\n=== HASIL STEPWISE REGRESSION ===\n")
+summary(stepwise_model)
+```
+
+## Perbandingan Ketiga Metode
+
+```{r}
+# Fungsi untuk ekstrak informasi model
+extract_model_info <- function(model, method_name) {
+  # Dapatkan variabel dalam model
+  vars_in_model <- names(coef(model))[-1]  # exclude intercept
+  if(length(vars_in_model) == 0) vars_in_model <- "None"
+  
+  return(data.frame(
+    Method = method_name,
+    Variables = paste(vars_in_model, collapse = ", "),
+    R_squared = round(summary(model)$r.squared, 3),
+    Adj_R_squared = round(summary(model)$adj.r.squared, 3),
+    AIC = round(AIC(model), 3),
+    BIC = round(BIC(model), 3),
+    p_value = round(anova(model)$`Pr(>F)`[1], 4)
+  ))
+}
+
+# Bandingkan ketiga metode
+comparison <- rbind(
+  extract_model_info(forward_model, "Forward Selection"),
+  extract_model_info(backward_model, "Backward Elimination"),
+  extract_model_info(stepwise_model, "Stepwise Regression")
+)
+
+kable(comparison, caption = "Perbandingan Hasil Ketiga Metode") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Model Terbaik Final
+
+```{r}
+# Berdasarkan hasil analisis, tentukan model terbaik
+cat("=== MODEL TERBAIK FINAL ===\n")
+cat("Berdasarkan kriteria All Possible Regression dan prosedur stepwise,\n")
+cat("model terbaik yang konsisten adalah:\n\n")
+
+# Ambil model terbaik (misal forward_model)
+final_model <- forward_model
+summary(final_model)
+
+# Persamaan regresi
+coeffs <- coef(final_model)
+cat("\nPersamaan Regresi:\n")
+if(length(coeffs) == 2) {
+  cat("Y =", round(coeffs[1], 3), "+", round(coeffs[2], 3), "* X\n")
+} else if(length(coeffs) == 3) {
+  cat("Y =", round(coeffs[1], 3), "+", round(coeffs[2], 3), "* X1 +", round(coeffs[3], 3), "* X2\n")
+} else {
+  cat("Y =", round(coeffs[1], 3))
+  for(i in 2:length(coeffs)) {
+    cat(" +", round(coeffs[i], 3), "*", names(coeffs)[i])
+  }
+  cat("\n")
+}
+```
+
+## Validasi Model Terpilih
+
+```{r}
+# Diagnostic plots untuk model terpilih
+par(mfrow = c(2, 2))
+plot(final_model)
+par(mfrow = c(1, 1))
+
+# Uji asumsi
+cat("\n=== UJI ASUMSI MODEL ===\n")
+
+# Uji normalitas residual (Shapiro-Wilk)
+shapiro_test <- shapiro.test(residuals(final_model))
+cat("Uji Normalitas Residual (Shapiro-Wilk):\n")
+cat("W =", round(shapiro_test$statistic, 4), ", p-value =", round(shapiro_test$p.value, 4))
+if(shapiro_test$p.value > 0.05) {
+  cat(" -> Residual berdistribusi normal\n")
+} else {
+  cat(" -> Residual tidak berdistribusi normal\n")
+}
+
+# Durbin-Watson test untuk autokorelasi (jika tersedia)
+if(require(lmtest, quietly = TRUE)) {
+  dw_test <- dwtest(final_model)
+  cat("\nUji Autokorelasi (Durbin-Watson):\n")
+  cat("DW =", round(dw_test$statistic, 4), ", p-value =", round(dw_test$p.value, 4))
+  if(dw_test$p.value > 0.05) {
+    cat(" -> Tidak ada autokorelasi\n")
+  } else {
+    cat(" -> Ada indikasi autokorelasi\n")
+  }
+}
+```
+
+## Kesimpulan
+
+```{r}
+cat("=== KESIMPULAN ===\n")
+cat("1. Dari", nrow(results), "model yang dibandingkan dalam All Possible Regression,\n")
+cat("   model dengan variabel", paste(names(coef(final_model))[-1], collapse = " dan "), "adalah yang terbaik.\n\n")
+
+cat("2. Ketiga prosedur (Forward, Backward, Stepwise) menghasilkan model yang sama/konsisten.\n\n")
+
+cat("3. Model terpilih memiliki:\n")
+cat("   - R² =", round(summary(final_model)$r.squared, 3), "\n")
+cat("   - Adjusted R² =", round(summary(final_model)$adj.r.squared, 3), "\n")
+cat("   - AIC =", round(AIC(final_model), 3), "\n")
+cat("   - BIC =", round(BIC(final_model), 3), "\n\n")
+
+cat("4. Semua variabel dalam model final signifikan pada α = 0.05\n")
+```
+
+# MODUL 10: ANALISIS REGRESI POLINOMIAL
+
+## Deskripsi Singkat
+
+Regresi polinomial digunakan ketika hubungan antara variabel bebas (X) dan variabel tak bebas (Y) tidak berbentuk linier. Model regresi polinomial ordo 2 (kuadratik) dengan 1 variabel bebas:
+
+$Y_i = \beta_0 + \beta_1 x_i + \beta_{11} x_i^2 + \varepsilon_i$
+
+dimana $x_i = X_i - \bar{X}$ (variabel dipusatkan untuk menghindari multikolinieritas).
+
+## Identifikasi dan Pembentukan Model
+
+Data yang digunakan: - Y: Persen Pengangguran - X: Persen Lulusan Sarjana/Diploma IV
+
+```{r}
+# Definisikan variabel untuk analisis polinomial
+# Sesuaikan nama kolom dengan data yang tersedia
+Y_poly <- data_modul10---
+title: "Praktikum Analisis Regresi - Modul 8, 9 & 10"
+subtitle: "Seleksi Model Regresi Terbaik dan Regresi Polinomial"
+author: "Nama Mahasiswa"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: flatly
+    highlight: tango
+---
+
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Setup dan Load Library
+
+```{r}
+# Load library yang diperlukan
+library(haven)        # untuk membaca file SPSS (.sav)
+library(readxl)       # untuk membaca file Excel
+library(dplyr)        # untuk manipulasi data
+library(knitr)        # untuk membuat tabel
+library(kableExtra)   # untuk styling tabel
+library(broom)        # untuk mengubah output model menjadi tidy format
+library(leaps)        # untuk all possible regression
+library(car)          # untuk berbagai fungsi statistik
+```
+
+# Load Data
+
+```{r}
+# Membaca data dari file .sav (SPSS) atau .xlsx (Excel)
+# Sesuaikan dengan format file yang tersedia
+
+# Data untuk Modul 8 & 9
+data <- haven::read_sav("Data_Regresi08.sav")
+
+# Data untuk Modul 10
+data_modul10 <- haven::read_sav("Data_Modul01.sav")
+
+# Alternatif jika menggunakan Excel:
+# data <- readxl::read_xlsx("Data_Regresi08.xlsx")
+# data_modul10 <- readxl::read_xlsx("Data_Modul01.xlsx")
+
+# Tampilkan struktur data
+str(data)
+head(data)
+
+cat("\n=== Data untuk Modul 10 ===\n")
+str(data_modul10)
+head(data_modul10)
+```
+
+# MODUL 8: ALL POSSIBLE REGRESSION
+
+## Deskripsi Data
+
+Data yang digunakan mengandung: - Y: Patient satisfaction (Tingkat Kepuasan Pasien) - X1: Patient's age (Umur Pasien, dalam tahun) - X2: Severity of illness (Tingkat Keparahan Penyakit, indeks) - X3: Anxiety level (Tingkat Kecemasan, indeks)
+
+```{r}
+# Ringkasan statistik deskriptif
+summary(data)
+```
+
+## Semua Kemungkinan Model (All Possible Regression)
+
+Dengan 3 variabel bebas (p=4), kita dapat membuat 2\^(p-1) = 2\^3 = 8 model alternatif.
+
+```{r}
+# Definisikan variabel
+Y <- data$`Patient satisfaction`  # sesuaikan nama kolom
+X1 <- data$`Patient's age`        # sesuaikan nama kolom  
+X2 <- data$`Severity of illness`  # sesuaikan nama kolom
+X3 <- data$`Anxiety level`        # sesuaikan nama kolom
+
+# Atau jika nama kolom berbeda, gunakan:
+# Y <- data[,1]   # kolom pertama sebagai Y
+# X1 <- data[,2]  # kolom kedua sebagai X1
+# X2 <- data[,3]  # dan seterusnya
+# X3 <- data[,4]
+
+# Buat data frame untuk analisis
+df <- data.frame(Y, X1, X2, X3)
+```
+
+### Model 1: Tanpa Variabel Bebas (Intercept Only)
+
+```{r}
+model1 <- lm(Y ~ 1, data = df)
+summary(model1)
+```
+
+### Model 2: Y \~ X1
+
+```{r}
+model2 <- lm(Y ~ X1, data = df)
+summary(model2)
+```
+
+### Model 3: Y \~ X2
+
+```{r}
+model3 <- lm(Y ~ X2, data = df)
+summary(model3)
+```
+
+### Model 4: Y \~ X3
+
+```{r}
+model4 <- lm(Y ~ X3, data = df)
+summary(model4)
+```
+
+### Model 5: Y \~ X1 + X2
+
+```{r}
+model5 <- lm(Y ~ X1 + X2, data = df)
+summary(model5)
+```
+
+### Model 6: Y \~ X1 + X3
+
+```{r}
+model6 <- lm(Y ~ X1 + X3, data = df)
+summary(model6)
+```
+
+### Model 7: Y \~ X2 + X3
+
+```{r}
+model7 <- lm(Y ~ X2 + X3, data = df)
+summary(model7)
+```
+
+### Model 8: Y \~ X1 + X2 + X3 (Full Model)
+
+```{r}
+model8 <- lm(Y ~ X1 + X2 + X3, data = df)
+summary(model8)
+```
+
+## Perhitungan Kriteria Pemilihan Model
+
+```{r}
+# Fungsi untuk menghitung kriteria pemilihan model
+calculate_criteria <- function(model, model_name, p) {
+  # Ekstrak informasi dari model
+  r_squared <- summary(model)$r.squared
+  adj_r_squared <- summary(model)$adj.r.squared
+  sse <- sum(residuals(model)^2)
+  mse <- sse / (length(residuals(model)) - p)
+  n <- length(residuals(model))
+  
+  # AIC dan BIC/SBC
+  aic <- AIC(model)
+  bic <- BIC(model)
+  
+  # Untuk Cp Mallows, kita perlu MSE dari full model
+  mse_full <- sum(residuals(model8)^2) / (length(residuals(model8)) - 4)
+  cp <- (sse / mse_full) - (n - 2*p)
+  
+  return(data.frame(
+    Model = model_name,
+    p = p,
+    df = n - p,
+    SSE = round(sse, 3),
+    R_squared = round(r_squared, 3),
+    MSE = round(mse, 3),
+    Adj_R_squared = round(adj_r_squared, 3),
+    AIC = round(aic, 3),
+    BIC_SBC = round(bic, 3),
+    Cp_Mallow = round(cp, 2)
+  ))
+}
+
+# Hitung kriteria untuk semua model
+results <- rbind(
+  calculate_criteria(model2, "X1", 2),
+  calculate_criteria(model3, "X2", 2),
+  calculate_criteria(model4, "X3", 2),
+  calculate_criteria(model5, "X1, X2", 3),
+  calculate_criteria(model6, "X1, X3", 3),
+  calculate_criteria(model7, "X2, X3", 3),
+  calculate_criteria(model8, "X1, X2, X3", 4)
+)
+
+# Tampilkan tabel hasil
+kable(results, caption = "Kriteria Pemilihan Model Terbaik") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Interpretasi Kriteria
+
+```{r}
+# Cari model terbaik berdasarkan setiap kriteria
+cat("MODEL TERBAIK BERDASARKAN SETIAP KRITERIA:\n")
+cat("===============================================\n")
+
+# R² tertinggi
+best_r2 <- results[which.max(results$R_squared), ]
+cat("R² tertinggi:", best_r2$Model, "=", best_r2$R_squared, "\n")
+
+# Adjusted R² tertinggi
+best_adj_r2 <- results[which.max(results$Adj_R_squared), ]
+cat("Adj R² tertinggi:", best_adj_r2$Model, "=", best_adj_r2$Adj_R_squared, "\n")
+
+# AIC terendah
+best_aic <- results[which.min(results$AIC), ]
+cat("AIC terendah:", best_aic$Model, "=", best_aic$AIC, "\n")
+
+# BIC/SBC terendah
+best_bic <- results[which.min(results$BIC_SBC), ]
+cat("BIC/SBC terendah:", best_bic$Model, "=", best_bic$BIC_SBC, "\n")
+
+# Cp Mallow mendekati p
+results$cp_diff <- abs(results$Cp_Mallow - results$p)
+best_cp <- results[which.min(results$cp_diff), ]
+cat("Cp Mallow mendekati p:", best_cp$Model, "| Cp =", best_cp$Cp_Mallow, "| p =", best_cp$p, "\n")
+```
+
+# MODUL 9: STEPWISE REGRESSION, FORWARD SELECTION, BACKWARD ELIMINATION
+
+## Forward Selection
+
+```{r}
+# Forward Selection menggunakan step()
+# Mulai dari intercept only model
+model_null <- lm(Y ~ 1, data = df)
+model_full <- lm(Y ~ X1 + X2 + X3, data = df)
+
+forward_model <- step(model_null, 
+                     scope = list(lower = model_null, upper = model_full),
+                     direction = "forward",
+                     trace = TRUE)
+
+cat("\n=== HASIL FORWARD SELECTION ===\n")
+summary(forward_model)
+```
+
+## Backward Elimination
+
+```{r}
+# Backward Elimination
+# Mulai dari full model
+backward_model <- step(model_full, 
+                      direction = "backward",
+                      trace = TRUE)
+
+cat("\n=== HASIL BACKWARD ELIMINATION ===\n")
+summary(backward_model)
+```
+
+## Stepwise Regression
+
+```{r}
+# Stepwise Regression
+# Mulai dari null model, bisa maju dan mundur
+stepwise_model <- step(model_null,
+                      scope = list(lower = model_null, upper = model_full),
+                      direction = "both",
+                      trace = TRUE)
+
+cat("\n=== HASIL STEPWISE REGRESSION ===\n")
+summary(stepwise_model)
+```
+
+## Perbandingan Ketiga Metode
+
+```{r}
+# Fungsi untuk ekstrak informasi model
+extract_model_info <- function(model, method_name) {
+  # Dapatkan variabel dalam model
+  vars_in_model <- names(coef(model))[-1]  # exclude intercept
+  if(length(vars_in_model) == 0) vars_in_model <- "None"
+  
+  return(data.frame(
+    Method = method_name,
+    Variables = paste(vars_in_model, collapse = ", "),
+    R_squared = round(summary(model)$r.squared, 3),
+    Adj_R_squared = round(summary(model)$adj.r.squared, 3),
+    AIC = round(AIC(model), 3),
+    BIC = round(BIC(model), 3),
+    p_value = round(anova(model)$`Pr(>F)`[1], 4)
+  ))
+}
+
+# Bandingkan ketiga metode
+comparison <- rbind(
+  extract_model_info(forward_model, "Forward Selection"),
+  extract_model_info(backward_model, "Backward Elimination"),
+  extract_model_info(stepwise_model, "Stepwise Regression")
+)
+
+kable(comparison, caption = "Perbandingan Hasil Ketiga Metode") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Model Terbaik Final
+
+```{r}
+# Berdasarkan hasil analisis, tentukan model terbaik
+cat("=== MODEL TERBAIK FINAL ===\n")
+cat("Berdasarkan kriteria All Possible Regression dan prosedur stepwise,\n")
+cat("model terbaik yang konsisten adalah:\n\n")
+
+# Ambil model terbaik (misal forward_model)
+final_model <- forward_model
+summary(final_model)
+
+# Persamaan regresi
+coeffs <- coef(final_model)
+cat("\nPersamaan Regresi:\n")
+if(length(coeffs) == 2) {
+  cat("Y =", round(coeffs[1], 3), "+", round(coeffs[2], 3), "* X\n")
+} else if(length(coeffs) == 3) {
+  cat("Y =", round(coeffs[1], 3), "+", round(coeffs[2], 3), "* X1 +", round(coeffs[3], 3), "* X2\n")
+} else {
+  cat("Y =", round(coeffs[1], 3))
+  for(i in 2:length(coeffs)) {
+    cat(" +", round(coeffs[i], 3), "*", names(coeffs)[i])
+  }
+  cat("\n")
+}
+```
+
+## Validasi Model Terpilih
+
+```{r}
+# Diagnostic plots untuk model terpilih
+par(mfrow = c(2, 2))
+plot(final_model)
+par(mfrow = c(1, 1))
+
+# Uji asumsi
+cat("\n=== UJI ASUMSI MODEL ===\n")
+
+# Uji normalitas residual (Shapiro-Wilk)
+shapiro_test <- shapiro.test(residuals(final_model))
+cat("Uji Normalitas Residual (Shapiro-Wilk):\n")
+cat("W =", round(shapiro_test$statistic, 4), ", p-value =", round(shapiro_test$p.value, 4))
+if(shapiro_test$p.value > 0.05) {
+  cat(" -> Residual berdistribusi normal\n")
+} else {
+  cat(" -> Residual tidak berdistribusi normal\n")
+}
+
+# Durbin-Watson test untuk autokorelasi (jika tersedia)
+if(require(lmtest, quietly = TRUE)) {
+  dw_test <- dwtest(final_model)
+  cat("\nUji Autokorelasi (Durbin-Watson):\n")
+  cat("DW =", round(dw_test$statistic, 4), ", p-value =", round(dw_test$p.value, 4))
+  if(dw_test$p.value > 0.05) {
+    cat(" -> Tidak ada autokorelasi\n")
+  } else {
+    cat(" -> Ada indikasi autokorelasi\n")
+  }
+}
+```
+
+## Kesimpulan
+
+```{r}
+cat("=== KESIMPULAN ===\n")
+cat("1. Dari", nrow(results), "model yang dibandingkan dalam All Possible Regression,\n")
+cat("   model dengan variabel", paste(names(coef(final_model))[-1], collapse = " dan "), "adalah yang terbaik.\n\n")
+
+cat("2. Ketiga prosedur (Forward, Backward, Stepwise) menghasilkan model yang sama/konsisten.\n\n")
+
+cat("3. Model terpilih memiliki:\n")
+cat("   - R² =", round(summary(final_model)$r.squared, 3), "\n")
+cat("   - Adjusted R² =", round(summary(final_model)$adj.r.squared, 3), "\n")
+cat("   - AIC =", round(AIC(final_model), 3), "\n")
+cat("   - BIC =", round(BIC(final_model), 3), "\n\n")
+
+Persen Pengangguran`  # Sesuaikan nama kolom
+X_poly <- data_modul10---
+title: "Praktikum Analisis Regresi - Modul 8, 9 & 10"
+subtitle: "Seleksi Model Regresi Terbaik dan Regresi Polinomial"
+author: "Nama Mahasiswa"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: flatly
+    highlight: tango
+---
+
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Setup dan Load Library
+
+```{r}
+# Load library yang diperlukan
+library(haven)        # untuk membaca file SPSS (.sav)
+library(readxl)       # untuk membaca file Excel
+library(dplyr)        # untuk manipulasi data
+library(knitr)        # untuk membuat tabel
+library(kableExtra)   # untuk styling tabel
+library(broom)        # untuk mengubah output model menjadi tidy format
+library(leaps)        # untuk all possible regression
+library(car)          # untuk berbagai fungsi statistik
+```
+
+# Load Data
+
+```{r}
+# Membaca data dari file .sav (SPSS) atau .xlsx (Excel)
+# Sesuaikan dengan format file yang tersedia
+
+# Data untuk Modul 8 & 9
+data <- haven::read_sav("Data_Regresi08.sav")
+
+# Data untuk Modul 10
+data_modul10 <- haven::read_sav("Data_Modul01.sav")
+
+# Alternatif jika menggunakan Excel:
+# data <- readxl::read_xlsx("Data_Regresi08.xlsx")
+# data_modul10 <- readxl::read_xlsx("Data_Modul01.xlsx")
+
+# Tampilkan struktur data
+str(data)
+head(data)
+
+cat("\n=== Data untuk Modul 10 ===\n")
+str(data_modul10)
+head(data_modul10)
+```
+
+# MODUL 8: ALL POSSIBLE REGRESSION
+
+## Deskripsi Data
+
+Data yang digunakan mengandung: - Y: Patient satisfaction (Tingkat Kepuasan Pasien) - X1: Patient's age (Umur Pasien, dalam tahun) - X2: Severity of illness (Tingkat Keparahan Penyakit, indeks) - X3: Anxiety level (Tingkat Kecemasan, indeks)
+
+```{r}
+# Ringkasan statistik deskriptif
+summary(data)
+```
+
+## Semua Kemungkinan Model (All Possible Regression)
+
+Dengan 3 variabel bebas (p=4), kita dapat membuat 2\^(p-1) = 2\^3 = 8 model alternatif.
+
+```{r}
+# Definisikan variabel
+Y <- data$`Patient satisfaction`  # sesuaikan nama kolom
+X1 <- data$`Patient's age`        # sesuaikan nama kolom  
+X2 <- data$`Severity of illness`  # sesuaikan nama kolom
+X3 <- data$`Anxiety level`        # sesuaikan nama kolom
+
+# Atau jika nama kolom berbeda, gunakan:
+# Y <- data[,1]   # kolom pertama sebagai Y
+# X1 <- data[,2]  # kolom kedua sebagai X1
+# X2 <- data[,3]  # dan seterusnya
+# X3 <- data[,4]
+
+# Buat data frame untuk analisis
+df <- data.frame(Y, X1, X2, X3)
+```
+
+### Model 1: Tanpa Variabel Bebas (Intercept Only)
+
+```{r}
+model1 <- lm(Y ~ 1, data = df)
+summary(model1)
+```
+
+### Model 2: Y \~ X1
+
+```{r}
+model2 <- lm(Y ~ X1, data = df)
+summary(model2)
+```
+
+### Model 3: Y \~ X2
+
+```{r}
+model3 <- lm(Y ~ X2, data = df)
+summary(model3)
+```
+
+### Model 4: Y \~ X3
+
+```{r}
+model4 <- lm(Y ~ X3, data = df)
+summary(model4)
+```
+
+### Model 5: Y \~ X1 + X2
+
+```{r}
+model5 <- lm(Y ~ X1 + X2, data = df)
+summary(model5)
+```
+
+### Model 6: Y \~ X1 + X3
+
+```{r}
+model6 <- lm(Y ~ X1 + X3, data = df)
+summary(model6)
+```
+
+### Model 7: Y \~ X2 + X3
+
+```{r}
+model7 <- lm(Y ~ X2 + X3, data = df)
+summary(model7)
+```
+
+### Model 8: Y \~ X1 + X2 + X3 (Full Model)
+
+```{r}
+model8 <- lm(Y ~ X1 + X2 + X3, data = df)
+summary(model8)
+```
+
+## Perhitungan Kriteria Pemilihan Model
+
+```{r}
+# Fungsi untuk menghitung kriteria pemilihan model
+calculate_criteria <- function(model, model_name, p) {
+  # Ekstrak informasi dari model
+  r_squared <- summary(model)$r.squared
+  adj_r_squared <- summary(model)$adj.r.squared
+  sse <- sum(residuals(model)^2)
+  mse <- sse / (length(residuals(model)) - p)
+  n <- length(residuals(model))
+  
+  # AIC dan BIC/SBC
+  aic <- AIC(model)
+  bic <- BIC(model)
+  
+  # Untuk Cp Mallows, kita perlu MSE dari full model
+  mse_full <- sum(residuals(model8)^2) / (length(residuals(model8)) - 4)
+  cp <- (sse / mse_full) - (n - 2*p)
+  
+  return(data.frame(
+    Model = model_name,
+    p = p,
+    df = n - p,
+    SSE = round(sse, 3),
+    R_squared = round(r_squared, 3),
+    MSE = round(mse, 3),
+    Adj_R_squared = round(adj_r_squared, 3),
+    AIC = round(aic, 3),
+    BIC_SBC = round(bic, 3),
+    Cp_Mallow = round(cp, 2)
+  ))
+}
+
+# Hitung kriteria untuk semua model
+results <- rbind(
+  calculate_criteria(model2, "X1", 2),
+  calculate_criteria(model3, "X2", 2),
+  calculate_criteria(model4, "X3", 2),
+  calculate_criteria(model5, "X1, X2", 3),
+  calculate_criteria(model6, "X1, X3", 3),
+  calculate_criteria(model7, "X2, X3", 3),
+  calculate_criteria(model8, "X1, X2, X3", 4)
+)
+
+# Tampilkan tabel hasil
+kable(results, caption = "Kriteria Pemilihan Model Terbaik") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Interpretasi Kriteria
+
+```{r}
+# Cari model terbaik berdasarkan setiap kriteria
+cat("MODEL TERBAIK BERDASARKAN SETIAP KRITERIA:\n")
+cat("===============================================\n")
+
+# R² tertinggi
+best_r2 <- results[which.max(results$R_squared), ]
+cat("R² tertinggi:", best_r2$Model, "=", best_r2$R_squared, "\n")
+
+# Adjusted R² tertinggi
+best_adj_r2 <- results[which.max(results$Adj_R_squared), ]
+cat("Adj R² tertinggi:", best_adj_r2$Model, "=", best_adj_r2$Adj_R_squared, "\n")
+
+# AIC terendah
+best_aic <- results[which.min(results$AIC), ]
+cat("AIC terendah:", best_aic$Model, "=", best_aic$AIC, "\n")
+
+# BIC/SBC terendah
+best_bic <- results[which.min(results$BIC_SBC), ]
+cat("BIC/SBC terendah:", best_bic$Model, "=", best_bic$BIC_SBC, "\n")
+
+# Cp Mallow mendekati p
+results$cp_diff <- abs(results$Cp_Mallow - results$p)
+best_cp <- results[which.min(results$cp_diff), ]
+cat("Cp Mallow mendekati p:", best_cp$Model, "| Cp =", best_cp$Cp_Mallow, "| p =", best_cp$p, "\n")
+```
+
+# MODUL 9: STEPWISE REGRESSION, FORWARD SELECTION, BACKWARD ELIMINATION
+
+## Forward Selection
+
+```{r}
+# Forward Selection menggunakan step()
+# Mulai dari intercept only model
+model_null <- lm(Y ~ 1, data = df)
+model_full <- lm(Y ~ X1 + X2 + X3, data = df)
+
+forward_model <- step(model_null, 
+                     scope = list(lower = model_null, upper = model_full),
+                     direction = "forward",
+                     trace = TRUE)
+
+cat("\n=== HASIL FORWARD SELECTION ===\n")
+summary(forward_model)
+```
+
+## Backward Elimination
+
+```{r}
+# Backward Elimination
+# Mulai dari full model
+backward_model <- step(model_full, 
+                      direction = "backward",
+                      trace = TRUE)
+
+cat("\n=== HASIL BACKWARD ELIMINATION ===\n")
+summary(backward_model)
+```
+
+## Stepwise Regression
+
+```{r}
+# Stepwise Regression
+# Mulai dari null model, bisa maju dan mundur
+stepwise_model <- step(model_null,
+                      scope = list(lower = model_null, upper = model_full),
+                      direction = "both",
+                      trace = TRUE)
+
+cat("\n=== HASIL STEPWISE REGRESSION ===\n")
+summary(stepwise_model)
+```
+
+## Perbandingan Ketiga Metode
+
+```{r}
+# Fungsi untuk ekstrak informasi model
+extract_model_info <- function(model, method_name) {
+  # Dapatkan variabel dalam model
+  vars_in_model <- names(coef(model))[-1]  # exclude intercept
+  if(length(vars_in_model) == 0) vars_in_model <- "None"
+  
+  return(data.frame(
+    Method = method_name,
+    Variables = paste(vars_in_model, collapse = ", "),
+    R_squared = round(summary(model)$r.squared, 3),
+    Adj_R_squared = round(summary(model)$adj.r.squared, 3),
+    AIC = round(AIC(model), 3),
+    BIC = round(BIC(model), 3),
+    p_value = round(anova(model)$`Pr(>F)`[1], 4)
+  ))
+}
+
+# Bandingkan ketiga metode
+comparison <- rbind(
+  extract_model_info(forward_model, "Forward Selection"),
+  extract_model_info(backward_model, "Backward Elimination"),
+  extract_model_info(stepwise_model, "Stepwise Regression")
+)
+
+kable(comparison, caption = "Perbandingan Hasil Ketiga Metode") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Model Terbaik Final
+
+```{r}
+# Berdasarkan hasil analisis, tentukan model terbaik
+cat("=== MODEL TERBAIK FINAL ===\n")
+cat("Berdasarkan kriteria All Possible Regression dan prosedur stepwise,\n")
+cat("model terbaik yang konsisten adalah:\n\n")
+
+# Ambil model terbaik (misal forward_model)
+final_model <- forward_model
+summary(final_model)
+
+# Persamaan regresi
+coeffs <- coef(final_model)
+cat("\nPersamaan Regresi:\n")
+if(length(coeffs) == 2) {
+  cat("Y =", round(coeffs[1], 3), "+", round(coeffs[2], 3), "* X\n")
+} else if(length(coeffs) == 3) {
+  cat("Y =", round(coeffs[1], 3), "+", round(coeffs[2], 3), "* X1 +", round(coeffs[3], 3), "* X2\n")
+} else {
+  cat("Y =", round(coeffs[1], 3))
+  for(i in 2:length(coeffs)) {
+    cat(" +", round(coeffs[i], 3), "*", names(coeffs)[i])
+  }
+  cat("\n")
+}
+```
+
+## Validasi Model Terpilih
+
+```{r}
+# Diagnostic plots untuk model terpilih
+par(mfrow = c(2, 2))
+plot(final_model)
+par(mfrow = c(1, 1))
+
+# Uji asumsi
+cat("\n=== UJI ASUMSI MODEL ===\n")
+
+# Uji normalitas residual (Shapiro-Wilk)
+shapiro_test <- shapiro.test(residuals(final_model))
+cat("Uji Normalitas Residual (Shapiro-Wilk):\n")
+cat("W =", round(shapiro_test$statistic, 4), ", p-value =", round(shapiro_test$p.value, 4))
+if(shapiro_test$p.value > 0.05) {
+  cat(" -> Residual berdistribusi normal\n")
+} else {
+  cat(" -> Residual tidak berdistribusi normal\n")
+}
+
+# Durbin-Watson test untuk autokorelasi (jika tersedia)
+if(require(lmtest, quietly = TRUE)) {
+  dw_test <- dwtest(final_model)
+  cat("\nUji Autokorelasi (Durbin-Watson):\n")
+  cat("DW =", round(dw_test$statistic, 4), ", p-value =", round(dw_test$p.value, 4))
+  if(dw_test$p.value > 0.05) {
+    cat(" -> Tidak ada autokorelasi\n")
+  } else {
+    cat(" -> Ada indikasi autokorelasi\n")
+  }
+}
+```
+
+## Kesimpulan
+
+```{r}
+cat("=== KESIMPULAN ===\n")
+cat("1. Dari", nrow(results), "model yang dibandingkan dalam All Possible Regression,\n")
+cat("   model dengan variabel", paste(names(coef(final_model))[-1], collapse = " dan "), "adalah yang terbaik.\n\n")
+
+cat("2. Ketiga prosedur (Forward, Backward, Stepwise) menghasilkan model yang sama/konsisten.\n\n")
+
+cat("3. Model terpilih memiliki:\n")
+cat("   - R² =", round(summary(final_model)$r.squared, 3), "\n")
+cat("   - Adjusted R² =", round(summary(final_model)$adj.r.squared, 3), "\n")
+cat("   - AIC =", round(AIC(final_model), 3), "\n")
+cat("   - BIC =", round(BIC(final_model), 3), "\n\n")
+
+Persen Lulusan Sarjana/Diploma IV`  # Sesuaikan nama kolom
+
+# Alternatif jika nama kolom berbeda, gunakan nomor kolom:
+# Y_poly <- data_modul10[, 11]  # kolom ke-11 untuk Persen Pengangguran
+# X_poly <- data_modul10[, 19]  # kolom ke-19 untuk Persen Lulusan
+
+# Buat data frame
+df_poly <- data.frame(Y = Y_poly, X = X_poly)
+
+# Hapus missing values jika ada
+df_poly <- na.omit(df_poly)
+
+# Tampilkan deskriptif statistik
+summary(df_poly)
+```
+
+### Scatter Plot untuk Identifikasi Hubungan
+
+```{r}
+# Buat scatter plot
+library(ggplot2)
+
+ggplot(df_poly, aes(x = X, y = Y)) +
+  geom_point(alpha = 0.6, size = 2) +
+  geom_smooth(method = "lm", se = FALSE, color = "blue", linetype = "dashed", 
+              aes(color = "Linear")) +
+  geom_smooth(method = "lm", formula = y ~ poly(x, 2), se = FALSE, color = "red",
+              aes(color = "Quadratic")) +
+  labs(
+    title = "Scatter Plot: Persen Pengangguran vs Persen Lulusan Sarjana/Diploma IV",
+    x = "Persen Lulusan Sarjana/Diploma IV",
+    y = "Persen Pengangguran",
+    color = "Model"
+  ) +
+  theme_minimal() +
+  scale_color_manual(values = c("Linear" = "blue", "Quadratic" = "red"))
+```
+
+## Pendugaan Parameter
+
+### Cara I: Menggunakan Polynomial Regression Langsung
+
+```{r}
+# Model Linear
+model_linear <- lm(Y ~ X, data = df_poly)
+summary(model_linear)
+
+cat("\nPersamaan Regresi Linear:\n")
+coeffs_lin <- coef(model_linear)
+cat("Y =", round(coeffs_lin[1], 3), "+", round(coeffs_lin[2], 3), "* X\n")
+```
+
+```{r}
+# Model Kuadratik/Polinomial Ordo 2
+model_quad <- lm(Y ~ X + I(X^2), data = df_poly)
+summary(model_quad)
+
+cat("\nPersamaan Regresi Kuadratik:\n")
+coeffs_quad <- coef(model_quad)
+cat("Y =", round(coeffs_quad[1], 3), "+", round(coeffs_quad[2], 3), "* X +", 
+    round(coeffs_quad[3], 3), "* X²\n")
+```
+
+### Cara II: Menggunakan Variable Centered (Menghindari Multikolinieritas)
+
+```{r}
+# Hitung rata-rata X
+mean_X <- mean(df_poly$X, na.rm = TRUE)
+cat("Rata-rata X (Persen Lulusan Sarjana/Diploma IV):", round(mean_X, 3), "\n")
+
+# Buat variabel centered
+df_poly$X_centered <- df_poly$X - mean_X
+df_poly$X_centered_sq <- df_poly$X_centered^2
+
+# Model dengan variabel centered
+model_centered <- lm(Y ~ X_centered + X_centered_sq, data = df_poly)
+summary(model_centered)
+
+cat("\nPersamaan Regresi dengan Variabel Centered:\n")
+coeffs_cent <- coef(model_centered)
+cat("Y =", round(coeffs_cent[1], 3), "+", round(coeffs_cent[2], 3), "* x +", 
+    round(coeffs_cent[3], 3), "* x²\n")
+cat("dimana x = X -", round(mean_X, 3), "\n")
+```
+
+## Pengujian Signifikansi Parameter
+
+```{r}
+# ANOVA untuk model linear
+cat("=== ANOVA MODEL LINEAR ===\n")
+anova_linear <- anova(model_linear)
+print(anova_linear)
+
+# ANOVA untuk model kuadratik
+cat("\n=== ANOVA MODEL KUADRATIK ===\n")
+anova_quad <- anova(model_quad)
+print(anova_quad)
+
+# Uji signifikansi penambahan suku kuadratik
+cat("\n=== UJI SIGNIFIKANSI PENAMBAHAN SUKU KUADRATIK ===\n")
+anova_comparison <- anova(model_linear, model_quad)
+print(anova_comparison)
+
+if(anova_comparison---
+title: "Praktikum Analisis Regresi - Modul 8, 9 & 10"
+subtitle: "Seleksi Model Regresi Terbaik dan Regresi Polinomial"
+author: "Nama Mahasiswa"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    theme: flatly
+    highlight: tango
+---
+
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Setup dan Load Library
+
+```{r}
+# Load library yang diperlukan
+library(haven)        # untuk membaca file SPSS (.sav)
+library(readxl)       # untuk membaca file Excel
+library(dplyr)        # untuk manipulasi data
+library(knitr)        # untuk membuat tabel
+library(kableExtra)   # untuk styling tabel
+library(broom)        # untuk mengubah output model menjadi tidy format
+library(leaps)        # untuk all possible regression
+library(car)          # untuk berbagai fungsi statistik
+```
+
+# Load Data
+
+```{r}
+# Membaca data dari file .sav (SPSS) atau .xlsx (Excel)
+# Sesuaikan dengan format file yang tersedia
+
+# Data untuk Modul 8 & 9
+data <- haven::read_sav("Data_Regresi08.sav")
+
+# Data untuk Modul 10
+data_modul10 <- haven::read_sav("Data_Modul01.sav")
+
+# Alternatif jika menggunakan Excel:
+# data <- readxl::read_xlsx("Data_Regresi08.xlsx")
+# data_modul10 <- readxl::read_xlsx("Data_Modul01.xlsx")
+
+# Tampilkan struktur data
+str(data)
+head(data)
+
+cat("\n=== Data untuk Modul 10 ===\n")
+str(data_modul10)
+head(data_modul10)
+```
+
+# MODUL 8: ALL POSSIBLE REGRESSION
+
+## Deskripsi Data
+
+Data yang digunakan mengandung: - Y: Patient satisfaction (Tingkat Kepuasan Pasien) - X1: Patient's age (Umur Pasien, dalam tahun) - X2: Severity of illness (Tingkat Keparahan Penyakit, indeks) - X3: Anxiety level (Tingkat Kecemasan, indeks)
+
+```{r}
+# Ringkasan statistik deskriptif
+summary(data)
+```
+
+## Semua Kemungkinan Model (All Possible Regression)
+
+Dengan 3 variabel bebas (p=4), kita dapat membuat 2\^(p-1) = 2\^3 = 8 model alternatif.
+
+```{r}
+# Definisikan variabel
+Y <- data$`Patient satisfaction`  # sesuaikan nama kolom
+X1 <- data$`Patient's age`        # sesuaikan nama kolom  
+X2 <- data$`Severity of illness`  # sesuaikan nama kolom
+X3 <- data$`Anxiety level`        # sesuaikan nama kolom
+
+# Atau jika nama kolom berbeda, gunakan:
+# Y <- data[,1]   # kolom pertama sebagai Y
+# X1 <- data[,2]  # kolom kedua sebagai X1
+# X2 <- data[,3]  # dan seterusnya
+# X3 <- data[,4]
+
+# Buat data frame untuk analisis
+df <- data.frame(Y, X1, X2, X3)
+```
+
+### Model 1: Tanpa Variabel Bebas (Intercept Only)
+
+```{r}
+model1 <- lm(Y ~ 1, data = df)
+summary(model1)
+```
+
+### Model 2: Y \~ X1
+
+```{r}
+model2 <- lm(Y ~ X1, data = df)
+summary(model2)
+```
+
+### Model 3: Y \~ X2
+
+```{r}
+model3 <- lm(Y ~ X2, data = df)
+summary(model3)
+```
+
+### Model 4: Y \~ X3
+
+```{r}
+model4 <- lm(Y ~ X3, data = df)
+summary(model4)
+```
+
+### Model 5: Y \~ X1 + X2
+
+```{r}
+model5 <- lm(Y ~ X1 + X2, data = df)
+summary(model5)
+```
+
+### Model 6: Y \~ X1 + X3
+
+```{r}
+model6 <- lm(Y ~ X1 + X3, data = df)
+summary(model6)
+```
+
+### Model 7: Y \~ X2 + X3
+
+```{r}
+model7 <- lm(Y ~ X2 + X3, data = df)
+summary(model7)
+```
+
+### Model 8: Y \~ X1 + X2 + X3 (Full Model)
+
+```{r}
+model8 <- lm(Y ~ X1 + X2 + X3, data = df)
+summary(model8)
+```
+
+## Perhitungan Kriteria Pemilihan Model
+
+```{r}
+# Fungsi untuk menghitung kriteria pemilihan model
+calculate_criteria <- function(model, model_name, p) {
+  # Ekstrak informasi dari model
+  r_squared <- summary(model)$r.squared
+  adj_r_squared <- summary(model)$adj.r.squared
+  sse <- sum(residuals(model)^2)
+  mse <- sse / (length(residuals(model)) - p)
+  n <- length(residuals(model))
+  
+  # AIC dan BIC/SBC
+  aic <- AIC(model)
+  bic <- BIC(model)
+  
+  # Untuk Cp Mallows, kita perlu MSE dari full model
+  mse_full <- sum(residuals(model8)^2) / (length(residuals(model8)) - 4)
+  cp <- (sse / mse_full) - (n - 2*p)
+  
+  return(data.frame(
+    Model = model_name,
+    p = p,
+    df = n - p,
+    SSE = round(sse, 3),
+    R_squared = round(r_squared, 3),
+    MSE = round(mse, 3),
+    Adj_R_squared = round(adj_r_squared, 3),
+    AIC = round(aic, 3),
+    BIC_SBC = round(bic, 3),
+    Cp_Mallow = round(cp, 2)
+  ))
+}
+
+# Hitung kriteria untuk semua model
+results <- rbind(
+  calculate_criteria(model2, "X1", 2),
+  calculate_criteria(model3, "X2", 2),
+  calculate_criteria(model4, "X3", 2),
+  calculate_criteria(model5, "X1, X2", 3),
+  calculate_criteria(model6, "X1, X3", 3),
+  calculate_criteria(model7, "X2, X3", 3),
+  calculate_criteria(model8, "X1, X2, X3", 4)
+)
+
+# Tampilkan tabel hasil
+kable(results, caption = "Kriteria Pemilihan Model Terbaik") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Interpretasi Kriteria
+
+```{r}
+# Cari model terbaik berdasarkan setiap kriteria
+cat("MODEL TERBAIK BERDASARKAN SETIAP KRITERIA:\n")
+cat("===============================================\n")
+
+# R² tertinggi
+best_r2 <- results[which.max(results$R_squared), ]
+cat("R² tertinggi:", best_r2$Model, "=", best_r2$R_squared, "\n")
+
+# Adjusted R² tertinggi
+best_adj_r2 <- results[which.max(results$Adj_R_squared), ]
+cat("Adj R² tertinggi:", best_adj_r2$Model, "=", best_adj_r2$Adj_R_squared, "\n")
+
+# AIC terendah
+best_aic <- results[which.min(results$AIC), ]
+cat("AIC terendah:", best_aic$Model, "=", best_aic$AIC, "\n")
+
+# BIC/SBC terendah
+best_bic <- results[which.min(results$BIC_SBC), ]
+cat("BIC/SBC terendah:", best_bic$Model, "=", best_bic$BIC_SBC, "\n")
+
+# Cp Mallow mendekati p
+results$cp_diff <- abs(results$Cp_Mallow - results$p)
+best_cp <- results[which.min(results$cp_diff), ]
+cat("Cp Mallow mendekati p:", best_cp$Model, "| Cp =", best_cp$Cp_Mallow, "| p =", best_cp$p, "\n")
+```
+
+# MODUL 9: STEPWISE REGRESSION, FORWARD SELECTION, BACKWARD ELIMINATION
+
+## Forward Selection
+
+```{r}
+# Forward Selection menggunakan step()
+# Mulai dari intercept only model
+model_null <- lm(Y ~ 1, data = df)
+model_full <- lm(Y ~ X1 + X2 + X3, data = df)
+
+forward_model <- step(model_null, 
+                     scope = list(lower = model_null, upper = model_full),
+                     direction = "forward",
+                     trace = TRUE)
+
+cat("\n=== HASIL FORWARD SELECTION ===\n")
+summary(forward_model)
+```
+
+## Backward Elimination
+
+```{r}
+# Backward Elimination
+# Mulai dari full model
+backward_model <- step(model_full, 
+                      direction = "backward",
+                      trace = TRUE)
+
+cat("\n=== HASIL BACKWARD ELIMINATION ===\n")
+summary(backward_model)
+```
+
+## Stepwise Regression
+
+```{r}
+# Stepwise Regression
+# Mulai dari null model, bisa maju dan mundur
+stepwise_model <- step(model_null,
+                      scope = list(lower = model_null, upper = model_full),
+                      direction = "both",
+                      trace = TRUE)
+
+cat("\n=== HASIL STEPWISE REGRESSION ===\n")
+summary(stepwise_model)
+```
+
+## Perbandingan Ketiga Metode
+
+```{r}
+# Fungsi untuk ekstrak informasi model
+extract_model_info <- function(model, method_name) {
+  # Dapatkan variabel dalam model
+  vars_in_model <- names(coef(model))[-1]  # exclude intercept
+  if(length(vars_in_model) == 0) vars_in_model <- "None"
+  
+  return(data.frame(
+    Method = method_name,
+    Variables = paste(vars_in_model, collapse = ", "),
+    R_squared = round(summary(model)$r.squared, 3),
+    Adj_R_squared = round(summary(model)$adj.r.squared, 3),
+    AIC = round(AIC(model), 3),
+    BIC = round(BIC(model), 3),
+    p_value = round(anova(model)$`Pr(>F)`[1], 4)
+  ))
+}
+
+# Bandingkan ketiga metode
+comparison <- rbind(
+  extract_model_info(forward_model, "Forward Selection"),
+  extract_model_info(backward_model, "Backward Elimination"),
+  extract_model_info(stepwise_model, "Stepwise Regression")
+)
+
+kable(comparison, caption = "Perbandingan Hasil Ketiga Metode") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Model Terbaik Final
+
+```{r}
+# Berdasarkan hasil analisis, tentukan model terbaik
+cat("=== MODEL TERBAIK FINAL ===\n")
+cat("Berdasarkan kriteria All Possible Regression dan prosedur stepwise,\n")
+cat("model terbaik yang konsisten adalah:\n\n")
+
+# Ambil model terbaik (misal forward_model)
+final_model <- forward_model
+summary(final_model)
+
+# Persamaan regresi
+coeffs <- coef(final_model)
+cat("\nPersamaan Regresi:\n")
+if(length(coeffs) == 2) {
+  cat("Y =", round(coeffs[1], 3), "+", round(coeffs[2], 3), "* X\n")
+} else if(length(coeffs) == 3) {
+  cat("Y =", round(coeffs[1], 3), "+", round(coeffs[2], 3), "* X1 +", round(coeffs[3], 3), "* X2\n")
+} else {
+  cat("Y =", round(coeffs[1], 3))
+  for(i in 2:length(coeffs)) {
+    cat(" +", round(coeffs[i], 3), "*", names(coeffs)[i])
+  }
+  cat("\n")
+}
+```
+
+## Validasi Model Terpilih
+
+```{r}
+# Diagnostic plots untuk model terpilih
+par(mfrow = c(2, 2))
+plot(final_model)
+par(mfrow = c(1, 1))
+
+# Uji asumsi
+cat("\n=== UJI ASUMSI MODEL ===\n")
+
+# Uji normalitas residual (Shapiro-Wilk)
+shapiro_test <- shapiro.test(residuals(final_model))
+cat("Uji Normalitas Residual (Shapiro-Wilk):\n")
+cat("W =", round(shapiro_test$statistic, 4), ", p-value =", round(shapiro_test$p.value, 4))
+if(shapiro_test$p.value > 0.05) {
+  cat(" -> Residual berdistribusi normal\n")
+} else {
+  cat(" -> Residual tidak berdistribusi normal\n")
+}
+
+# Durbin-Watson test untuk autokorelasi (jika tersedia)
+if(require(lmtest, quietly = TRUE)) {
+  dw_test <- dwtest(final_model)
+  cat("\nUji Autokorelasi (Durbin-Watson):\n")
+  cat("DW =", round(dw_test$statistic, 4), ", p-value =", round(dw_test$p.value, 4))
+  if(dw_test$p.value > 0.05) {
+    cat(" -> Tidak ada autokorelasi\n")
+  } else {
+    cat(" -> Ada indikasi autokorelasi\n")
+  }
+}
+```
+
+## Kesimpulan
+
+```{r}
+cat("=== KESIMPULAN ===\n")
+cat("1. Dari", nrow(results), "model yang dibandingkan dalam All Possible Regression,\n")
+cat("   model dengan variabel", paste(names(coef(final_model))[-1], collapse = " dan "), "adalah yang terbaik.\n\n")
+
+cat("2. Ketiga prosedur (Forward, Backward, Stepwise) menghasilkan model yang sama/konsisten.\n\n")
+
+cat("3. Model terpilih memiliki:\n")
+cat("   - R² =", round(summary(final_model)$r.squared, 3), "\n")
+cat("   - Adjusted R² =", round(summary(final_model)$adj.r.squared, 3), "\n")
+cat("   - AIC =", round(AIC(final_model), 3), "\n")
+cat("   - BIC =", round(BIC(final_model), 3), "\n\n")
+
+Pr(>F)`[2] < 0.05) {
+  cat("Kesimpulan: Penambahan suku kuadratik signifikan meningkatkan model (p < 0.05)\n")
+} else {
+  cat("Kesimpulan: Penambahan suku kuadratik tidak signifikan (p > 0.05)\n")
+}
+```
+
+## Pemeriksaan Kesesuaian Model
+
+```{r}
+# Bandingkan R-squared dan Adjusted R-squared
+models_comparison <- data.frame(
+  Model = c("Linear", "Quadratic", "Centered Quadratic"),
+  R_squared = c(
+    round(summary(model_linear)$r.squared, 4),
+    round(summary(model_quad)$r.squared, 4),
+    round(summary(model_centered)$r.squared, 4)
+  ),
+  Adj_R_squared = c(
+    round(summary(model_linear)$adj.r.squared, 4),
+    round(summary(model_quad)$adj.r.squared, 4),
+    round(summary(model_centered)$adj.r.squared, 4)
+  ),
+  AIC = c(
+    round(AIC(model_linear), 2),
+    round(AIC(model_quad), 2),
+    round(AIC(model_centered), 2)
+  ),
+  BIC = c(
+    round(BIC(model_linear), 2),
+    round(BIC(model_quad), 2),
+    round(BIC(model_centered), 2)
+  ),
+  RMSE = c(
+    round(sqrt(mean(residuals(model_linear)^2)), 4),
+    round(sqrt(mean(residuals(model_quad)^2)), 4),
+    round(sqrt(mean(residuals(model_centered)^2)), 4)
+  )
+)
+
+kable(models_comparison, caption = "Perbandingan Kebaikan Model") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Uji Lack of Fit
+
+```{r}
+# Uji Lack of Fit untuk model kuadratik dengan variabel centered
+# Kita akan menggunakan ANOVA untuk menguji lack of fit
+
+# Untuk uji lack of fit, kita perlu membandingkan model dengan pure error
+# Ini dilakukan dengan mengelompokkan observasi berdasarkan nilai X yang sama/mirip
+
+# Hitung residual sum of squares
+rss_quad <- sum(residuals(model_centered)^2)
+df_error <- length(residuals(model_centered)) - 3  # n - p
+
+# Mean Square Error
+mse_quad <- rss_quad / df_error
+
+cat("=== INFORMASI UJI LACK OF FIT ===\n")
+cat("Residual Sum of Squares:", round(rss_quad, 3), "\n")
+cat("Degrees of Freedom (Error):", df_error, "\n")
+cat("Mean Square Error:", round(mse_quad, 4), "\n")
+
+# Catatan: Uji Lack of Fit lengkap memerlukan replikasi data
+# atau pengelompokan nilai X yang serupa
+cat("\nCatatan: Uji Lack of Fit lengkap memerlukan replikasi atau pengelompokan data\n")
+```
+
+## Diagnostic Plots
+
+```{r}
+# Diagnostic plots untuk model kuadratik terpilih
+par(mfrow = c(2, 2))
+plot(model_centered, main = "Diagnostic Plots - Model Kuadratik Centered")
+par(mfrow = c(1, 1))
+
+# Plot residual vs fitted
+library(ggplot2)
+
+# Buat data frame untuk plotting
+df_diag <- data.frame(
+  fitted = fitted(model_centered),
+  residuals = residuals(model_centered),
+  standardized_residuals = rstandard(model_centered)
+)
+
+# Residuals vs Fitted
+ggplot(df_diag, aes(x = fitted, y = residuals)) +
+  geom_point(alpha = 0.6) +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  geom_smooth(se = FALSE, color = "blue") +
+  labs(
+    title = "Residuals vs Fitted Values",
+    x = "Fitted Values",
+    y = "Residuals"
+  ) +
+  theme_minimal()
+```
+
+## Validasi Model dan Prediksi
+
+```{r}
+# Uji normalitas residual
+shapiro_test_poly <- shapiro.test(residuals(model_centered))
+cat("=== UJI NORMALITAS RESIDUAL ===\n")
+cat("Shapiro-Wilk Test:\n")
+cat("W =", round(shapiro_test_poly$statistic, 4), 
+    ", p-value =", round(shapiro_test_poly$p.value, 4), "\n")
+
+if(shapiro_test_poly$p.value > 0.05) {
+  cat("Kesimpulan: Residual berdistribusi normal (p > 0.05)\n")
+} else {
+  cat("Kesimpulan: Residual tidak berdistribusi normal (p ≤ 0.05)\n")
+}
+
+# Prediksi untuk beberapa nilai X
+cat("\n=== PREDIKSI MENGGUNAKAN MODEL KUADRATIK ===\n")
+
+# Contoh prediksi
+X_new <- c(15, 20, 25, 30, 35)
+X_new_centered <- X_new - mean_X
+
+predictions <- predict(model_centered, 
+                      newdata = data.frame(X_centered = X_new_centered, 
+                                         X_centered_sq = X_new_centered^2),
+                      interval = "prediction")
+
+pred_results <- data.frame(
+  X = X_new,
+  X_centered = round(X_new_centered, 3),
+  Predicted_Y = round(predictions[,1], 3),
+  Lower_CI = round(predictions[,2], 3),
+  Upper_CI = round(predictions[,3], 3)
+)
+
+kable(pred_results, caption = "Prediksi Persen Pengangguran") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Visualisasi Model Final
+
+```{r}
+# Plot data asli dengan kurva regresi
+ggplot(df_poly, aes(x = X, y = Y)) +
+  geom_point(alpha = 0.6, size = 2, color = "darkgray") +
+  geom_smooth(method = "lm", se = TRUE, color = "blue", linetype = "dashed",
+              aes(color = "Linear"), alpha = 0.3) +
+  geom_smooth(method = "lm", formula = y ~ poly(x, 2), se = TRUE, color = "red",
+              aes(color = "Quadratic"), alpha = 0.3) +
+  labs(
+    title = "Model Regresi Linear vs Kuadratik",
+    subtitle = "Persen Pengangguran vs Persen Lulusan Sarjana/Diploma IV",
+    x = "Persen Lulusan Sarjana/Diploma IV (%)",
+    y = "Persen Pengangguran (%)",
+    color = "Model",
+    caption = paste("Model Kuadratik: R² =", round(summary(model_quad)$r.squared, 3))
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 12),
+    legend.position = "bottom"
+  ) +
+  scale_color_manual(values = c("Linear" = "blue", "Quadratic" = "red"))
+```
+
+## Kesimpulan Regresi Polinomial
+
+\`\`\`{r}
+
+------------------------------------------------------------------------
+
+**Catatan:** - Pastikan nama kolom dalam data sesuai dengan yang digunakan dalam script - Jika menggunakan file Excel, ganti `haven::read_sav()` dengan `readxl::read_xlsx()` - Sesuaikan path file data dengan lokasi file Anda

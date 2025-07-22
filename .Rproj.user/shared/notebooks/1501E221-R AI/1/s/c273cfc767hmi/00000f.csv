@@ -1,0 +1,7 @@
+"0","# Membaca data dari file .sav (SPSS) atau .xlsx (Excel)"
+"0","# Sesuaikan dengan format file yang tersedia"
+"0",""
+"0","# Data untuk Modul 8 & 9"
+"0","data <- haven::read_sav(""Data_Regresi08.sav"")"
+"2","Error: 'Data_Regresi08.sav' does not exist in current working directory ('C:/Users/ROG/OneDrive/Documents/UAS KOMSTAT AKHIR').
+"
